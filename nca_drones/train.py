@@ -27,6 +27,7 @@ import torch.nn.functional as F
 
 from env import Cfg, DroneEnv, manhattan, sample_tasks
 from nca import SpaceTimeNCA, make_cond
+from prune import prune_batch, verify_labels
 
 BIG = 10_000
 
@@ -34,18 +35,33 @@ BIG = 10_000
 # --------------------------------------------------------------------------
 # steering from voxels
 # --------------------------------------------------------------------------
-def _steer(logits, tid, d, t, env, pos, eps, temp, greedy, gen):
-    """One drone, one step: look at the tube logits of the reachable cells in slice t+1."""
+def _steer(logits, tid, d, t, env, pos, eps, temp, greedy, gen, ex=None):
+    """One drone, one step: look at the tube logits of the reachable cells in slice t+1.
+
+    Exploration: with probability eps the drone ignores the tube.  If `ex` is
+    given the deviation is temporally extended (a random action held for a
+    random number of steps), otherwise it is a single uniformly random action."""
+    n = len(pos)
     c = env.cand(pos)                                                   # [n,5,2]
     lg = logits[tid[:, None], d, t + 1, c[..., 0], c[..., 1]].float()   # [n,5]
     logq = F.log_softmax(lg / temp, -1)
-    p = (1 - eps[:, None]) * logq.exp() + eps[:, None] / 5.0
-    a = torch.multinomial(p, 1, generator=gen).squeeze(1)
+    if ex is None:
+        p = (1 - eps[:, None]) * logq.exp() + eps[:, None] / 5.0
+        a = torch.multinomial(p, 1, generator=gen).squeeze(1)
+    else:
+        a = torch.multinomial(logq.exp(), 1, generator=gen).squeeze(1)
+        start = (torch.rand(n, generator=gen) < eps) & (ex["left"][:, d] == 0)
+        new_a = torch.randint(0, 5, (n,), generator=gen)
+        new_len = torch.randint(1, ex["zmax"] + 1, (n,), generator=gen)
+        ex["act"][:, d] = torch.where(start, new_a, ex["act"][:, d])
+        ex["left"][:, d] = torch.where(start, new_len, ex["left"][:, d])
+        a = torch.where(ex["left"][:, d] > 0, ex["act"][:, d], a)
+        ex["left"][:, d] = (ex["left"][:, d] - 1).clamp(min=0)
     a = torch.where(greedy, lg.argmax(1), a)
-    return a, logq[torch.arange(len(a)), a]
+    return a, logq[torch.arange(n), a]
 
 
-def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None):
+def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None, ez=0):
     """Run M simulator episodes per task against target g, steering from the grown volume.
 
     logits: [N, 2, T+1, H, W] tube logits (channel 0 seeker, 1 recharger).
@@ -63,10 +79,11 @@ def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None
     logp = torch.zeros(n)
     cum = [logp.clone()]
     ret = torch.zeros(n)
+    ex = dict(act=torch.zeros(n, 2, dtype=torch.long), left=torch.zeros(n, 2, dtype=torch.long), zmax=ez) if ez > 0 else None
     for t in range(cfg.T):
         active = ~env.done
-        a_s, lp_s = _steer(logits, tid, 0, t, env, env.ps, eps, temp, greedy, gen)
-        a_r, lp_r = _steer(logits, tid, 1, t, env, env.pr, eps, temp, greedy, gen)
+        a_s, lp_s = _steer(logits, tid, 0, t, env, env.ps, eps, temp, greedy, gen, ex)
+        a_r, lp_r = _steer(logits, tid, 1, t, env, env.pr, eps, temp, greedy, gen, ex)
         logp = logp + torch.where(active, lp_s + lp_r, torch.zeros(n))
         ret = ret + env.step(a_s, a_r)
         traj_s.append(env.ps.clone()); traj_r.append(env.pr.clone())
@@ -223,6 +240,8 @@ def main():
     ap.add_argument("--hind", type=int, default=2, help="hindsight targets added per task and round (0 = off)")
     ap.add_argument("--hard_frac", type=float, default=-1.0, help="share of each batch drawn from samples where search beat the greedy readout")
     ap.add_argument("--taps", type=int, default=0, help="deep supervision: also apply the loss this many iterations before the end")
+    ap.add_argument("--prune", type=int, default=0, help="simulator-verified pruning of rewarded rollouts (interventional credit assignment)")
+    ap.add_argument("--ez", type=int, default=0, help="temporally-extended exploration: max length of a random excursion (0 = single-step noise)")
     ap.add_argument("--resume", default="")
     args = ap.parse_args()
 
@@ -274,16 +293,23 @@ def main():
         need = manhattan(s, g) > cfg.B
         with torch.no_grad():
             logits = grow(model, s, r, g, cfg, args.K, args.amp)
-            ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, temp=args.temp, greedy=greedy, gen=gen)
+            ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, temp=args.temp, greedy=greedy, gen=gen, ez=args.ez)
         best_time, best_roll, fv = hindsight_table(ro, N, M, cfg)
         gc = cell_of(g, cfg)
         # (a) the posed task
+        pr_stats = []
         any_succ = best_time[arN, gc] < BIG
         greedy_succ = fv[arN * M, gc] < BIG                 # rollout 0 of each task is the greedy readout
         if any_succ.any():
             i = torch.nonzero(any_succ).squeeze(1)
             tau_i = best_time[i, gc[i]]
-            lab = make_labels(ro, best_roll[i, gc[i]], tau_i, cfg)
+            if args.prune:
+                lab, tau_p, stop = prune_batch(ro, best_roll[i, gc[i]], tau_i, gc[i], cfg)
+                assert bool(verify_labels(s[i], r[i], g[i], lab, tau_p, cfg).all())
+                pr_stats.append((tau_i.float().mean(), tau_p.float().mean(), (stop > 0).float().mean(), (stop[need[i]] > 0).float().mean() if need[i].any() else torch.tensor(float("nan"))))
+                tau_i = tau_p
+            else:
+                lab = make_labels(ro, best_roll[i, gc[i]], tau_i, cfg)
             meta = torch.stack([tau_i, need[i].long(), torch.zeros_like(tau_i)], 1)
             buf.add(s[i], r[i], g[i], lab, ~greedy_succ[i], meta)
         # (b) hindsight: cells the seeker reached alive are rewarded targets for the same joint actions
@@ -304,7 +330,11 @@ def main():
             ti, ci, hg = ti[okh], ci[okh], hg[okh]
             if len(ti):
                 tau_h = best_time[ti, ci]
-                lab = make_labels(ro, best_roll[ti, ci], tau_h, cfg)
+                if args.prune:
+                    lab, tau_h, stop_h = prune_batch(ro, best_roll[ti, ci], tau_h, ci, cfg)
+                    assert bool(verify_labels(s[ti], r[ti], hg, lab, tau_h, cfg).all())
+                else:
+                    lab = make_labels(ro, best_roll[ti, ci], tau_h, cfg)
                 h_need = manhattan(s[ti], hg) > cfg.B
                 meta = torch.stack([tau_h, h_need.long(), torch.ones_like(tau_h)], 1)
                 buf.add(s[ti], r[ti], hg, lab, torch.zeros(len(ti), dtype=torch.bool), meta)
@@ -322,6 +352,9 @@ def main():
             buf_tau=float(buf.meta[: buf.n, 0].float().mean()) if buf.n else 0.0,
             n_hind=n_h, alive_T=float(ro["tau"].float().mean()), t_search=t_search,
         )
+        if pr_stats:
+            stats.update(tau_raw=float(pr_stats[0][0]), tau_pruned=float(pr_stats[0][1]),
+                         rech_moves=float(pr_stats[0][2]), rech_moves_need=float(pr_stats[0][3]))
 
         # ---------------- learn ------------------
         losses = []

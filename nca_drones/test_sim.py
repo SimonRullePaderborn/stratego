@@ -74,3 +74,45 @@ def test_task_filter():
 if __name__ == "__main__":
     test_basic(); test_task_filter(); test_hindsight_matches_simulator()
     print("all simulator checks passed")
+
+
+def test_prune():
+    """arrival_time mirrors DroneEnv; pruned rollouts are real rewarded rollouts and never slower."""
+    from prune import arrival_time, prune_batch, verify_labels
+    cfg = Cfg()
+    gen = torch.Generator().manual_seed(3)
+    N, M = 64, 32
+    s, r, g = sample_tasks(N, cfg, gen)
+    logits = torch.randn(N, 2, cfg.T + 1, cfg.H, cfg.W, generator=gen) * 1.5
+    eps = torch.linspace(0, 0.5, M).repeat(N)
+    greedy = torch.zeros(N * M, dtype=torch.bool)
+    ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, greedy=greedy, gen=gen, ez=4)
+    best_time, best_roll, fv = hindsight_table(ro, N, M, cfg)
+    tid = ro["tid"]
+    cs = (ro["traj_s"][..., 0] * cfg.W + ro["traj_s"][..., 1])
+    cr = (ro["traj_r"][..., 0] * cfg.W + ro["traj_r"][..., 1])
+    # 1. mirror check on every (rollout, cell)
+    for c in range(0, cfg.H * cfg.W, 7):
+        gc = torch.tensor([[c // cfg.W, c % cfg.W]]).expand(N * M, -1)
+        succ, tau = replay(s[tid], r[tid], gc, ro["acts"], cfg)
+        for i in range(0, N * M, 5):
+            if int(cs[i, 0]) == c:
+                continue
+            a = arrival_time(cs[i].tolist(), cr[i].tolist(), c, cfg.B, cfg.T)
+            assert (a > 0) == bool(succ[i]) and (a < 0 or a == int(tau[i])), (i, c, a, bool(succ[i]), int(tau[i]))
+    # 2. pruning keeps the reward (authoritative replay) and never delays it
+    reach = best_time < BIG
+    reach[torch.arange(N), s[:, 0] * cfg.W + s[:, 1]] = False
+    ti, ci = torch.nonzero(reach, as_tuple=True)
+    sel = torch.randperm(len(ti), generator=gen)[:400]
+    ti, ci = ti[sel], ci[sel]
+    tau = best_time[ti, ci]
+    lab, tau_p, stop = prune_batch(ro, best_roll[ti, ci], tau, ci, cfg)
+    hg = torch.stack([ci // cfg.W, ci % cfg.W], -1)
+    assert bool(verify_labels(s[ti], r[ti], hg, lab, tau_p, cfg).all())
+    assert bool((tau_p <= tau).all())
+    print(f"pruning: mean arrival {tau.float().mean():.2f} -> {tau_p.float().mean():.2f}; recharger still moves in {(stop > 0).float().mean():.2%} of rollouts")
+
+
+if __name__ == "__main__":
+    test_prune()
