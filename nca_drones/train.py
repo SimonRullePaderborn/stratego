@@ -128,24 +128,30 @@ class Buffer:
         self.r = torch.zeros(cap, 2, dtype=torch.long)
         self.g = torch.zeros(cap, 2, dtype=torch.long)
         self.lab = torch.zeros(cap, 2, cfg.T + 1, dtype=torch.long)
-        self.need = torch.zeros(cap, dtype=torch.bool)
+        self.need = torch.zeros(cap, dtype=torch.bool)   # bookkeeping only (for logs)
+        self.hard = torch.zeros(cap, dtype=torch.bool)   # search found reward where the greedy readout got none
         self.n = 0
         self.ptr = 0
 
-    def add(self, s, r, g, lab, need):
+    def add(self, s, r, g, lab, need, hard):
         for i in range(s.shape[0]):
             j = self.ptr
-            self.s[j], self.r[j], self.g[j], self.lab[j], self.need[j] = s[i], r[i], g[i], lab[i], need[i]
+            self.s[j], self.r[j], self.g[j], self.lab[j], self.need[j], self.hard[j] = s[i], r[i], g[i], lab[i], need[i], hard[i]
             self.ptr = (self.ptr + 1) % self.cap
             self.n = min(self.n + 1, self.cap)
 
-    def sample(self, bs, gen, need_frac=None):
-        if need_frac is not None and self.need[: self.n].any() and (~self.need[: self.n]).any():
-            nn_ = int(round(bs * need_frac))
-            idx_need = torch.nonzero(self.need[: self.n]).squeeze(1)
-            idx_easy = torch.nonzero(~self.need[: self.n]).squeeze(1)
-            a = idx_need[torch.randint(len(idx_need), (nn_,), generator=gen)]
-            b = idx_easy[torch.randint(len(idx_easy), (bs - nn_,), generator=gen)]
+    def sample(self, bs, gen, hard_frac=None):
+        """Uniform replay, optionally with a fixed share of 'search beat the tissue' samples.
+
+        The priority flag is defined by reward alone: the greedy readout earned 0,
+        a sampled rollout earned 1."""
+        hard = self.hard[: self.n]
+        if hard_frac is not None and hard.any() and (~hard).any():
+            nh = int(round(bs * hard_frac))
+            idx_h = torch.nonzero(hard).squeeze(1)
+            idx_e = torch.nonzero(~hard).squeeze(1)
+            a = idx_h[torch.randint(len(idx_h), (nh,), generator=gen)]
+            b = idx_e[torch.randint(len(idx_e), (bs - nh,), generator=gen)]
             idx = torch.cat([a, b])
         else:
             idx = torch.randint(self.n, (bs,), generator=gen)
@@ -176,7 +182,10 @@ def main():
     ap.add_argument("--eval_every", type=int, default=25)
     ap.add_argument("--B", type=int, default=5)
     ap.add_argument("--T", type=int, default=20)
-    ap.add_argument("--need_frac", type=float, default=-1.0)
+    ap.add_argument("--hard_frac", type=float, default=-1.0, help="share of each batch drawn from samples where search beat the greedy readout")
+    ap.add_argument("--M2", type=int, default=0, help="extra rollouts for tasks whose first M rollouts earned no reward")
+    ap.add_argument("--taps", type=int, default=0, help="deep supervision: also apply the loss this many iterations before the end")
+    ap.add_argument("--lr_final", type=float, default=1.0, help="cosine-decay the lr to this fraction")
     ap.add_argument("--resume", default="")
     args = ap.parse_args()
 
@@ -215,6 +224,12 @@ def main():
     ema = {}
     for rnd in range(start_round, args.rounds):
         # ---------------- search -----------------
+        t_r0 = time.time()
+        if args.lr_final < 1.0:
+            import math
+            frac = rnd / max(1, args.rounds - 1)
+            for pg in opt.param_groups:
+                pg["lr"] = args.lr * (args.lr_final + (1 - args.lr_final) * 0.5 * (1 + math.cos(math.pi * frac)))
         s, r, g = sample_tasks(args.N * 2, cfg, gen, "all")
         keys = task_key(s, r, g, cfg).tolist()
         keep = torch.tensor([k not in held for k in keys])
@@ -223,6 +238,7 @@ def main():
         with torch.no_grad():
             logits = grow(model, s, r, g, cfg, args.K, args.amp)
             ro = rollout(logits, s, r, g, cfg, M=args.M, eps=eps, temp=args.temp, greedy=greedy, gen=gen)
+        t_grow = time.time() - t_r0
         succ = ro["success"].reshape(args.N, args.M)
         tau = ro["tau"].reshape(args.N, args.M).float()
         logp = ro["logp"].reshape(args.N, args.M)
@@ -232,8 +248,31 @@ def main():
         any_succ = succ.any(1)
         sel = torch.arange(args.N) * args.M + best
         lab = traj_to_labels(ro["traj_s"][sel], ro["traj_r"][sel], cfg)
+        hard = ~succ[:, 0]
         if any_succ.any():
-            buf.add(s[any_succ], r[any_succ], g[any_succ], lab[any_succ], need[any_succ])
+            buf.add(s[any_succ], r[any_succ], g[any_succ], lab[any_succ], need[any_succ], hard[any_succ])
+        # second, larger search only where no rollout was rewarded
+        if args.M2 > 0 and (~any_succ).any():
+            idx2 = torch.nonzero(~any_succ).squeeze(1)
+            n2 = len(idx2)
+            eps2 = torch.linspace(0.02, args.eps_max, args.M2).repeat(n2)
+            with torch.no_grad():
+                ro2 = rollout(logits[idx2], s[idx2], r[idx2], g[idx2], cfg, M=args.M2, eps=eps2, temp=args.temp,
+                              greedy=torch.zeros(n2 * args.M2, dtype=torch.bool), gen=gen)
+            succ2 = ro2["success"].reshape(n2, args.M2)
+            tau2 = ro2["tau"].reshape(n2, args.M2).float()
+            logp2 = ro2["logp"].reshape(n2, args.M2)
+            score2 = torch.where(succ2, -tau2 * 1000.0 + logp2.clamp(min=-900), torch.full_like(tau2, -1e9))
+            best2 = score2.argmax(1)
+            any2 = succ2.any(1)
+            sel2 = torch.arange(n2) * args.M2 + best2
+            lab2 = traj_to_labels(ro2["traj_s"][sel2], ro2["traj_r"][sel2], cfg)
+            if any2.any():
+                j = idx2[any2]
+                buf.add(s[j], r[j], g[j], lab2[any2], need[j], torch.ones(len(j), dtype=torch.bool))
+                any_succ = any_succ.clone()
+                any_succ[j] = True
+        t_search = time.time() - t_r0
 
         stats = dict(
             round=rnd,
@@ -242,21 +281,23 @@ def main():
             greedy_easy=float(succ[:, 0][~need].float().mean()) if (~need).any() else float("nan"),
             greedy_need=float(succ[:, 0][need].float().mean()) if need.any() else float("nan"),
             buf=buf.n, buf_need=float(buf.need[: buf.n].float().mean()) if buf.n else 0.0,
+            buf_hard=float(buf.hard[: buf.n].float().mean()) if buf.n else 0.0,
+            t_grow=t_grow, t_search=t_search,
         )
 
         # ---------------- learn ------------------
         losses = []
         if buf.n >= args.bs:
             for _ in range(args.G):
-                bs_, br_, bg_, blab = buf.sample(args.bs, gen, args.need_frac if args.need_frac >= 0 else None)
+                bs_, br_, bg_, blab = buf.sample(args.bs, gen, args.hard_frac if args.hard_frac >= 0 else None)
                 cond = make_cond(bs_, br_, bg_, cfg)
                 K = args.K + int(torch.randint(-args.K_jitter, args.K_jitter + 1, (1,), generator=gen))
-                if args.amp:
-                    with torch.autocast("cpu", dtype=torch.bfloat16):
-                        lg, _ = model(cond, K)
-                else:
-                    lg, _ = model(cond, K)
-                loss = tube_loss(lg, blab, cfg)
+                taps = (K - args.taps,) if args.taps > 0 else ()
+                with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(args.amp)):
+                    res = model(cond, K, taps=taps)
+                loss = tube_loss(res[0], blab, cfg)
+                for tl in (res[2] if taps else ()):
+                    loss = loss + 0.3 * tube_loss(tl, blab, cfg)
                 opt.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
