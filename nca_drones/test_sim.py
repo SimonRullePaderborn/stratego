@@ -123,3 +123,35 @@ def test_prune():
 
 if __name__ == "__main__":
     test_prune()
+
+
+def test_crossplay():
+    """The batched pair judge must agree with a true simulator replay for every pair."""
+    from train import crossplay
+    from prune import labels_to_actions
+    cfg = Cfg()
+    gen = torch.Generator().manual_seed(5)
+    N, M = 24, 12
+    s, r, g = sample_tasks(N, cfg, gen)
+    logits = torch.randn(N, 2, cfg.T + 1, cfg.H, cfg.W, generator=gen) * 1.5
+    eps = torch.linspace(0, 0.4, M).repeat(N)
+    shared = (torch.arange(M) % 2 == 0).repeat(N)
+    ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, greedy=torch.zeros(N * M, dtype=torch.bool), gen=gen, ez=3, shared=shared, kinematic=True)
+    cs = (ro["traj_s"][..., 0] * cfg.W + ro["traj_s"][..., 1]).reshape(N, M, cfg.T + 1)
+    cr = (ro["traj_r"][..., 0] * cfg.W + ro["traj_r"][..., 1]).reshape(N, M, cfg.T + 1)
+    gc = g[:, 0] * cfg.W + g[:, 1]
+    arr = crossplay(cs, cr, gc, cfg)
+    acts = ro["acts"].reshape(N, M, cfg.T, 2)
+    n_ok = 0
+    for i in range(M):
+        for j in range(M):
+            a = torch.stack([acts[:, i, :, 0], acts[:, j, :, 1]], -1)
+            succ, tau = replay(s, r, g, a, cfg)
+            assert bool((succ == (arr[:, i, j] < BIG)).all()), (i, j)
+            assert bool((tau[succ] == arr[:, i, j][succ]).all()), (i, j)
+            n_ok += int(succ.sum())
+    print(f"cross-play judge == simulator replay on all {N * M * M} pairs ({n_ok} rewarded)")
+
+
+if __name__ == "__main__":
+    test_crossplay()

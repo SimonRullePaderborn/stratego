@@ -133,6 +133,13 @@ def partner_relevance(ps, g, r0, cfg, K, rng):
 
 
 def prune_batch(ro, roll, tau, gcell, cfg, null_k=0, rng=None, post_w=0.0, edit=True):
+    W = cfg.W
+    cs = ro["traj_s"][roll][..., 0] * W + ro["traj_s"][roll][..., 1]
+    cr = ro["traj_r"][roll][..., 0] * W + ro["traj_r"][roll][..., 1]
+    return credit_batch(cs, cr, tau, gcell, cfg, null_k, rng, post_w, edit)
+
+
+def credit_batch(cs, cr, tau, gcell, cfg, null_k=0, rng=None, post_w=0.0, edit=True):
     """Prune selected rollouts and work out which parts of them carry credit.
 
     Returns labels [k, 2, T+1], per-slice loss weights [k, 2, T+1], new tau [k],
@@ -146,12 +153,10 @@ def prune_batch(ro, roll, tau, gcell, cfg, null_k=0, rng=None, post_w=0.0, edit=
         the last time its presence could matter (its last move or its last contact),
       * everything after the reward carries weight post_w (default 0: the episode is over).
     """
-    W = cfg.W
-    cs = (ro["traj_s"][roll][..., 0] * W + ro["traj_s"][roll][..., 1]).tolist()
-    cr = (ro["traj_r"][roll][..., 0] * W + ro["traj_r"][roll][..., 1]).tolist()
+    cs, cr = cs.tolist(), cr.tolist()                 # [k, T+1] cell indices of the two worldlines
     taus = tau.tolist()
     gs = gcell.tolist()
-    k = len(roll)
+    k = len(taus)
     lab = torch.zeros(k, 2, cfg.T + 1, dtype=torch.long)
     wts = torch.ones(k, 2, cfg.T + 1)
     new_tau = torch.zeros(k, dtype=torch.long)

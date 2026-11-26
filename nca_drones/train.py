@@ -27,7 +27,7 @@ import torch.nn.functional as F
 
 from env import Cfg, DroneEnv, manhattan, sample_tasks
 from nca import SpaceTimeNCA, make_cond
-from prune import prune_batch, verify_labels
+from prune import credit_batch, prune_batch, verify_labels
 
 BIG = 10_000
 
@@ -35,13 +35,15 @@ BIG = 10_000
 # --------------------------------------------------------------------------
 # steering from voxels
 # --------------------------------------------------------------------------
-def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None, ez=0, shared=None):
+def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None, ez=0, shared=None, kinematic=False):
     """Run M simulator episodes per task against target g, steering from the grown volume.
 
     logits: [N, 2, T+1, H, W] tube logits (channel 0 seeker, 1 recharger).
     At time t a drone on cell p looks at the cells it can reach and moves to one
     of them according to the tube logits in slice t+1.
     g=None gives target-free flight (used by the search phase for hindsight).
+    kinematic=True only SAMPLES the two worldlines for all T steps (no battery,
+    no termination); they are judged afterwards by the simulator (see crossplay).
 
     Exploration (search phase only; evaluation is greedy):
       eps    [n]  probability per step of starting a random excursion (a random
@@ -56,7 +58,8 @@ def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None
     tid = torch.arange(N).repeat_interleave(M)
     n = N * M
     arn = torch.arange(n)
-    env = DroneEnv(s[tid], r[tid], g[tid] if g is not None else None, cfg)
+    env_cfg = Cfg(H=cfg.H, W=cfg.W, T=cfg.T, B=10 ** 6) if kinematic else cfg
+    env = DroneEnv(s[tid], r[tid], g[tid] if g is not None else None, env_cfg)
     if eps is None:
         eps = torch.zeros(n)
     if greedy is None:
@@ -72,6 +75,8 @@ def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None
     traj_s, traj_r, acts = [env.ps.clone()], [env.pr.clone()], []
     logp = torch.zeros(n)
     cum = [logp.clone()]
+    lpd = torch.zeros(n, 2)
+    cumd = [lpd.clone()]
     ret = torch.zeros(n)
 
     def gumbel(*shape):
@@ -106,12 +111,14 @@ def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None
                 ex_left[:, d] = (ex_left[:, d] - 1).clamp(min=0)
                 a = torch.where(greedy, a, a_s)
             lp_t = lp_t + logq[arn, a]
+            lpd[:, d] = lpd[:, d] + logq[arn, a]
             step_acts.append(a)
         logp = logp + torch.where(active, lp_t, torch.zeros(n))
         ret = ret + env.step(step_acts[0], step_acts[1])
         traj_s.append(env.ps.clone()); traj_r.append(env.pr.clone())
-        acts.append(torch.stack(step_acts, -1)); cum.append(logp.clone())
+        acts.append(torch.stack(step_acts, -1)); cum.append(logp.clone()); cumd.append(lpd.clone())
     return dict(
+        cumlogp_d=torch.stack(cumd, 1),
         traj_s=torch.stack(traj_s, 1), traj_r=torch.stack(traj_r, 1), acts=torch.stack(acts, 1),
         success=ret > 0, tau=env.tau.clone(), logp=logp, cumlogp=torch.stack(cum, 1), tid=tid,
         n_recharge=env.n_recharge.clone(),
@@ -143,6 +150,29 @@ def hindsight_table(ro, N, M, cfg):
     best_roll = torch.arange(N)[:, None] * M + best_m
     best_time = fv.reshape(N, M, HW).gather(1, best_m[:, None]).squeeze(1)
     return best_time, best_roll, fv
+
+
+def crossplay(cs, cr, gcell, cfg):
+    """Judge every (seeker worldline i, recharger worldline j) pair of a task.
+
+    cs, cr: [N, M, T+1] cell indices of M sampled worldlines per drone; gcell [N].
+    Returns arrival [N, M, M]: the time at which the pair is rewarded, BIG if never.
+    This is a batched mirror of DroneEnv.step (tested against it); the pair that is
+    finally imitated is re-checked by an authoritative replay in the real simulator.
+    """
+    N, M, T1 = cs.shape
+    bat = torch.full((N, M, M), cfg.B, dtype=torch.long)
+    alive = torch.ones(N, M, M, dtype=torch.bool)
+    arrival = torch.full((N, M, M), BIG, dtype=torch.long)
+    for t in range(1, T1):
+        meet = cs[:, :, None, t] == cr[:, None, :, t]
+        at_goal = (cs[:, :, t] == gcell[:, None])[:, :, None].expand(-1, -1, M)
+        bat = bat - 1
+        bat = torch.where(meet, torch.full_like(bat, cfg.B), bat)
+        succ = alive & at_goal
+        arrival = torch.where(succ, torch.full_like(arrival, t), arrival)
+        alive = alive & ~at_goal & (bat > 0) & (t < cfg.T)
+    return arrival
 
 
 def make_labels(ro, roll, tau, cfg):
@@ -314,6 +344,7 @@ def main():
     ap.add_argument("--taps", type=int, default=0, help="deep supervision: also apply the loss this many iterations before the end")
     ap.add_argument("--prune", type=int, default=0, help="1: simulator-verified pruning of rewarded rollouts; 2: no label editing, credit weights only")
     ap.add_argument("--threads", type=int, default=0)
+    ap.add_argument("--cross", type=int, default=0, help="cross-play search: judge all (seeker worldline, recharger worldline) pairs of a task in the simulator")
     ap.add_argument("--ema", type=float, default=0.0, help="decay of the weight average used for search and evaluation (0 = use the raw weights)")
     ap.add_argument("--prefix", type=float, default=0.0, help="share of training samples seeded with a random-length realised past (the tissue regrows the future)")
     ap.add_argument("--eval_closed", type=int, default=0, help="also evaluate the closed-loop readout on this many held-out recharge-needed tasks")
@@ -385,14 +416,48 @@ def main():
         need = manhattan(s, g) > cfg.B
         with torch.no_grad():
             logits = grow(ema_model, s, r, g, cfg, args.K, args.amp)
-            ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen, ez=args.ez, shared=shared_v)
-        best_time, best_roll, fv = hindsight_table(ro, N, M, cfg)
+            ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen, ez=args.ez, shared=shared_v,
+                         kinematic=bool(args.cross))
         gc = cell_of(g, cfg)
-        # (a) the posed task
         pr_stats = []
-        any_succ = best_time[arN, gc] < BIG
-        greedy_succ = fv[arN * M, gc] < BIG                 # rollout 0 of each task is the greedy readout
-        if any_succ.any():
+        xstats = {}
+        if args.cross:
+            # every sampled seeker worldline against every sampled recharger worldline, judged by the simulator
+            cs = (ro["traj_s"][..., 0] * cfg.W + ro["traj_s"][..., 1]).reshape(N, M, cfg.T + 1)
+            cr = (ro["traj_r"][..., 0] * cfg.W + ro["traj_r"][..., 1]).reshape(N, M, cfg.T + 1)
+            arr = crossplay(cs, cr, gc, cfg)                                    # [N,M,M]
+            lps = ro["cumlogp_d"][..., 0].reshape(N, M, cfg.T + 1)
+            lpr = ro["cumlogp_d"][..., 1].reshape(N, M, cfg.T + 1)
+            ta = arr.clamp(max=cfg.T)
+            lp_i = torch.gather(lps[:, :, None, :].expand(-1, -1, M, -1), 3, ta[..., None]).squeeze(-1)
+            lp_j = torch.gather(lpr[:, None, :, :].expand(-1, M, -1, -1), 3, ta[..., None]).squeeze(-1)
+            score = torch.where(arr < BIG, -arr.float() * 1000.0 + (lp_i + lp_j).clamp(min=-900.0), torch.full((N, M, M), -1e9))
+            flat = score.reshape(N, -1).argmax(1)
+            bi, bj = flat // M, flat % M
+            tau_x = arr[arN, bi, bj]
+            any_succ = tau_x < BIG
+            greedy_succ = arr[:, 0, 0] < BIG                                    # pair (0,0) is the greedy readout of both tubes
+            diag = arr.diagonal(dim1=1, dim2=2) < BIG
+            xstats = dict(search_diag_need=float(diag.any(1)[need].float().mean()) if need.any() else float("nan"),
+                          uni_s=float(((arr[:, :, 0] < BIG).any(1) & ~greedy_succ)[need].float().mean()) if need.any() else float("nan"),
+                          uni_r=float(((arr[:, 0, :] < BIG).any(1) & ~greedy_succ)[need].float().mean()) if need.any() else float("nan"))
+            if any_succ.any():
+                i = torch.nonzero(any_succ).squeeze(1)
+                lab, wts, tau_i, stop, rel = credit_batch(cs[i, bi[i]], cr[i, bj[i]], tau_x[i], gc[i], cfg, args.null_k, rng, args.post_w,
+                                                          edit=args.prune == 1)
+                assert bool(verify_labels(s[i], r[i], g[i], lab, tau_i, cfg).all()), "cross-play label rejected by the simulator"
+                pr_stats.append((tau_x[i].float().mean(), tau_i.float().mean(), (stop > 0).float().mean(),
+                                 (stop[need[i]] > 0).float().mean() if need[i].any() else torch.tensor(float("nan")),
+                                 rel.mean(), rel[need[i]].mean() if need[i].any() else torch.tensor(float("nan"))))
+                meta = torch.stack([tau_i, need[i].long(), torch.zeros_like(tau_i)], 1)
+                buf.add(s[i], r[i], g[i], lab, ~greedy_succ[i], meta, wts)
+            best_time = fv = None
+        else:
+            best_time, best_roll, fv = hindsight_table(ro, N, M, cfg)
+            any_succ = best_time[arN, gc] < BIG
+            greedy_succ = fv[arN * M, gc] < BIG             # rollout 0 of each task is the greedy readout
+        # (a) the posed task
+        if not args.cross and any_succ.any():
             i = torch.nonzero(any_succ).squeeze(1)
             tau_i = best_time[i, gc[i]]
             wts = None
@@ -409,7 +474,7 @@ def main():
             buf.add(s[i], r[i], g[i], lab, ~greedy_succ[i], meta, wts)
         # (b) hindsight: cells the seeker reached alive are rewarded targets for the same joint actions
         n_h = 0
-        if args.hind > 0:
+        if args.hind > 0 and not args.cross:
             reach = best_time < BIG
             reach[arN, gc] = False
             reach[arN, cell_of(s, cfg)] = False
@@ -448,6 +513,7 @@ def main():
             buf_tau=float(buf.meta[: buf.n, 0].float().mean()) if buf.n else 0.0,
             n_hind=n_h, alive_T=float(ro["tau"].float().mean()), t_search=t_search,
         )
+        stats.update(xstats)
         if pr_stats:
             stats.update(tau_raw=float(pr_stats[0][0]), tau_pruned=float(pr_stats[0][1]),
                          rech_moves=float(pr_stats[0][2]), rech_moves_need=float(pr_stats[0][3]),
