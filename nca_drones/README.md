@@ -318,6 +318,8 @@ Known limits:
 | `prune.py` | earlier experiments (label pruning); off in the audited path |
 | `test_sim.py` | consistency tests |
 | `EVAL_PROTOCOL.md` | the pre-registered final evaluation |
+| `docs/unified_wavefront_design.html` | specification of the proposed next design (not built yet); `docs/build_design_page.py` regenerates it |
+| `probe_extensions.py`, `diag_search.py`, `diag_open_closed.py` | zero-shot probes and diagnostics used by that specification |
 | `results/` | logs, analysis JSON and checkpoints of the reported runs |
 
 ## Reproducing
