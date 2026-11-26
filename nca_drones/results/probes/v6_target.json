@@ -1,0 +1,78 @@
+{
+ "ckpt": "results/v6/best_final.pt",
+ "round": 901,
+ "moving target p=0.0, tissue told current cell": {
+  "success": 0.843,
+  "never_met": 0.14,
+  "met_then_died": 0.007,
+  "timeout": 0.01
+ },
+ "moving target p=0.25, tissue told current cell": {
+  "success": 0.837,
+  "never_met": 0.143,
+  "met_then_died": 0.017,
+  "timeout": 0.003
+ },
+ "moving target p=0.5, tissue told current cell": {
+  "success": 0.837,
+  "never_met": 0.14,
+  "met_then_died": 0.023,
+  "timeout": 0.0
+ },
+ "moving target p=0.25, tissue only knows the t=0 cell": {
+  "success": 0.473,
+  "never_met": 0.133,
+  "met_then_died": 0.073,
+  "timeout": 0.32
+ },
+ "static target hidden until step 2": {
+  "success": 0.843,
+  "never_met": 0.137,
+  "met_then_died": 0.007,
+  "timeout": 0.013
+ },
+ "static target hidden until step 4": {
+  "success": 0.84,
+  "never_met": 0.147,
+  "met_then_died": 0.003,
+  "timeout": 0.01
+ },
+ "static target hidden until step 6": {
+  "success": 0.86,
+  "never_met": 0.133,
+  "met_then_died": 0.0,
+  "timeout": 0.007
+ },
+ "no target shown at all (free flight)": {
+  "n": 986,
+  "survived_past_step_5": 0.842,
+  "alive_at_T": 0.827,
+  "mean_lifetime": 17.61,
+  "met_by_distance": {
+   "1": 1.0,
+   "2": 1.0,
+   "3": 1.0,
+   "4": 0.993,
+   "5": 0.958,
+   "6": 0.881,
+   "7": 0.828,
+   "8": 0.443,
+   "9": 0.367,
+   "10": 0.027
+  },
+  "seeker_displacement_after_5": 2.49,
+  "recharger_displacement_after_5": 2.49
+ },
+ "evasive target, speed 0.5": {
+  "success": 0.71,
+  "never_met": 0.13,
+  "met_then_died": 0.037,
+  "timeout": 0.123
+ },
+ "evasive target, speed 1.0": {
+  "success": 0.0,
+  "never_met": 0.147,
+  "met_then_died": 0.07,
+  "timeout": 0.783
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "ckpt": "results/v6/best_final.pt",
+ "round": 901,
+ "P(1 seeker + recharger can gather within B)": 0.965,
+ "P(2 seekers + recharger can gather within B)": 0.905,
+ "P(3 seekers + recharger can gather within B)": 0.825,
+ "two seekers, common target (zero-shot)": {
+  "n": 1200,
+  "both": 0.34,
+  "exactly_one": 0.414,
+  "none": 0.246,
+  "each_alone_with_the_recharger": 0.815,
+  "both_would_succeed_alone": 0.683,
+  "both_by_seeker_separation": {
+   "<=2": 0.518,
+   "3-5": 0.281,
+   ">=6": 0.276
+  },
+  "share_by_separation": {
+   "<=2": 0.256,
+   "3-5": 0.421,
+   ">=6": 0.323
+  },
+  "seekers_never_recharged": 0.421
+ }
+}

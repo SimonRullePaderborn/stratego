@@ -218,6 +218,46 @@ sampled plan earns the reward, which is what the learner needs in order to have 
   independent noise and 9.1% with half shared noise; cross-play over the same samples finds one on
   23% and 27%. Cross-play was only used in one unfinished run (v9).
 
+## Zero-shot probes for possible next environments
+
+`probe_extensions.py`: the trained rule is applied unchanged, nothing is retrained. Single
+checkpoints (v6 = earlier run, v10 = audited run), 300-1,200 tasks per number, greedy readout.
+JSON in `results/probes/`.
+
+| changed world | v6 | v10 |
+|---|---|---|
+| as trained: 8x8, horizon 20, open-loop | 84.6% | 74.0% |
+| horizon 30 instead of 20, same tasks | 84.8% | 74.0% |
+| the same tasks placed inside a 12x12 grid | 69-78% | 69-71% |
+| uniformly drawn tasks on 12x12 (horizon 27) | 53% | 48% |
+| uniformly drawn tasks on 16x16 (horizon 35) | 25% | 22% |
+| of those: target farther than 14 cells (never seen in training) | 1-5% | 0-4% |
+| training-style search finds any reward, 12x12 / 16x16 | 65% / 39% | 59% / 33% |
+
+More iterations do not rescue the larger grids (16x16: 25%, 25%, 24% at 48, 64, 96 iterations for v6).
+With a fixed battery the task mix also changes with size: the share of tasks whose recharger starts
+8 or more cells away is 20% / 35% / 40% at 8 / 12 / 16, and only 96% / 72% / 51% of random
+recharge-needed placements are solvable at all.
+
+Closed-loop readout, v6, 300 recharge-needed tasks:
+
+| changed world | success |
+|---|---|
+| static target (reference) | 84.3% |
+| target does a random walk (moves in 25% / 50% of steps); the tissue is told its current cell each step | 83.7% / 83.7% |
+| same at 25%, but the tissue only knows the cell at t = 0 | 47.3% |
+| target flees from the seeker at half speed / at full speed | 71.0% / 0.0% |
+| static target hidden for the first 2 / 4 / 6 steps | 84.3% / 84.0% / 86.0% |
+| no target at all: the drones meet anyway and the seeker is alive past step 5 / still alive at step 20 | 84.2% / 82.7% |
+
+Two battery-limited drones seeded in the same seeker channel, one recharger, common target (v6,
+open-loop, 1,200 placements where everyone can gather within 5 steps): both arrive 34%, exactly one
+41%, none 25%; 52% when the two start within 2 cells of each other. Each of them alone with the
+recharger arrives in 81.5%.
+
+When does the recharger let go (v6, 838 successes): first meeting at step 3.3, 7.4 recharges per
+success; the seeker flies the last 0 / 1 / 2 / 3 / 4 / 5 steps alone in 15 / 35 / 35 / 11 / 4 / 1%.
+
 ## What is and is not hand-made
 
 Hand-made, and outside the network:

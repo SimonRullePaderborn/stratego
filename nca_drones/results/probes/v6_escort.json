@@ -1,0 +1,19 @@
+{
+ "ckpt": "results/v6/best_final.pt",
+ "round": 901,
+ "escort": {
+  "n_success": 838,
+  "first_meeting_step": 3.31,
+  "recharges_per_success": 7.38,
+  "steps_flown_alone_at_the_end": {
+   "0": 0.152,
+   "1": 0.351,
+   "2": 0.348,
+   "3": 0.106,
+   "4": 0.036,
+   "5": 0.007
+  },
+  "share_of_time_together_after_first_meeting": 0.703,
+  "remaining_distance_at_first_meeting": 5.36
+ }
+}

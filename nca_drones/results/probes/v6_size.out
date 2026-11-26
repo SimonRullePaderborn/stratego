@@ -1,0 +1,19 @@
+{
+ "8x8 T=20 K=32 (as trained)": 0.846,
+ "8x8 T=20 K=48 (as trained)": 0.822,
+ "8x8 T=20 K=64 (as trained)": 0.8,
+ "8x8 T=30 K=32 (longer horizon, same tasks)": 0.848,
+ "8x8 T=30 K=48 (longer horizon, same tasks)": 0.856,
+ "8x8 T=30 K=64 (longer horizon, same tasks)": 0.84,
+ "same tasks inside 12x12, offset 0, K=32": 0.748,
+ "same tasks inside 12x12, offset 2, K=32": 0.692,
+ "same tasks inside 12x12, offset 4, K=32": 0.776
+}
+12x12 T=27 K=32 {'success': 0.525, 'never_met': 0.363, 'met_then_died': 0.045, 'timeout': 0.068, 'target_within_14': 0.55, 'target_beyond_14': 0.05, 'recharger_within_7': 0.714, 'recharger_8_to_10': 0.105, 'share_beyond_14': 0.05}
+12x12 T=27 K=48 {'success': 0.538, 'never_met': 0.365, 'met_then_died': 0.043, 'timeout': 0.055, 'target_within_14': 0.563, 'target_beyond_14': 0.05, 'recharger_within_7': 0.714, 'recharger_8_to_10': 0.145, 'share_beyond_14': 0.05}
+12x12 T=27 K=64 {'success': 0.52, 'never_met': 0.375, 'met_then_died': 0.043, 'timeout': 0.062, 'target_within_14': 0.545, 'target_beyond_14': 0.05, 'recharger_within_7': 0.67, 'recharger_8_to_10': 0.185, 'share_beyond_14': 0.05}
+12x12 search {'greedy': 0.538, 'any_of_64': 0.652, 'any_target_within_14': 0.682, 'any_target_beyond_14': 0.1}
+16x16 T=35 K=48 {'success': 0.247, 'never_met': 0.5, 'met_then_died': 0.11, 'timeout': 0.143, 'target_within_14': 0.333, 'target_beyond_14': 0.012, 'recharger_within_7': 0.394, 'recharger_8_to_10': 0.04, 'share_beyond_14': 0.27}
+16x16 T=35 K=64 {'success': 0.25, 'never_met': 0.52, 'met_then_died': 0.1, 'timeout': 0.13, 'target_within_14': 0.338, 'target_beyond_14': 0.012, 'recharger_within_7': 0.394, 'recharger_8_to_10': 0.048, 'share_beyond_14': 0.27}
+16x16 T=35 K=96 {'success': 0.24, 'never_met': 0.54, 'met_then_died': 0.077, 'timeout': 0.143, 'target_within_14': 0.324, 'target_beyond_14': 0.012, 'recharger_within_7': 0.36, 'recharger_8_to_10': 0.072, 'share_beyond_14': 0.27}
+16x16 search {'greedy': 0.25, 'any_of_64': 0.393, 'any_target_within_14': 0.511, 'any_target_beyond_14': 0.074}
