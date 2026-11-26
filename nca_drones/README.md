@@ -192,6 +192,32 @@ brackets):
   step 5, where the battery is no longer a function of time, the hidden state still explains 30%
   and time explains nothing. That is suggestive, not proof of a battery variable.
 
+## Where the remaining failures come from
+
+Diagnostics run after the evaluation (`diag_search.py`, `diag_open_closed.py`; v10's checkpoint, 2,000
+further fresh tasks, seeds 5001-5010; JSON in `results/v10/diag_*.json`). "Search" asks whether ANY
+sampled plan earns the reward, which is what the learner needs in order to have something to imitate.
+
+| recharger starts at distance | <= 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|
+| greedy, open-loop dream | 91% | 86% | 59% | 38% | 19% | 6% |
+| greedy, closed-loop | 86% | 84% | 73% | 64% | 39% | 20% |
+| search as in training: any of 64 joint rollouts | 98% | 95% | 74% | 54% | 32% | 15% |
+| any of 64 x 64 seeker/recharger pairs (cross-play) | 99% | 98% | 90% | 84% | 62% | 49% |
+| any of 256 x 256 pairs | | | | 98% | 89% | 81% |
+
+* The far-start failures are a **search** problem: for most of those tasks training never sees a
+  rewarded example. Pairing every sampled seeker path with every sampled recharger path finds one.
+* In those failures the recharger is the laggard: after 5 steps the seeker has closed about 3.5 cells
+  of the gap and the recharger about 1.
+* The two readouts fail differently. Regrowing around the realised past gains 22 points where the
+  recharger starts 8 or more cells away (47% against 25%) and loses 5 points where it starts within
+  5 cells (86% against 91%), mostly through plans that meet and then dither until the time limit.
+  When both succeed, closed-loop plans are about 3 steps shorter. One of the two readouts solves 84%.
+* With an untrained tissue, 64 joint rollouts find a reward on 1.2% of recharge-needed tasks with
+  independent noise and 9.1% with half shared noise; cross-play over the same samples finds one on
+  23% and 27%. Cross-play was only used in one unfinished run (v9).
+
 ## What is and is not hand-made
 
 Hand-made, and outside the network:
