@@ -314,6 +314,7 @@ def main():
     ap.add_argument("--taps", type=int, default=0, help="deep supervision: also apply the loss this many iterations before the end")
     ap.add_argument("--prune", type=int, default=0, help="1: simulator-verified pruning of rewarded rollouts; 2: no label editing, credit weights only")
     ap.add_argument("--threads", type=int, default=0)
+    ap.add_argument("--ema", type=float, default=0.0, help="decay of the weight average used for search and evaluation (0 = use the raw weights)")
     ap.add_argument("--prefix", type=float, default=0.0, help="share of training samples seeded with a random-length realised past (the tissue regrows the future)")
     ap.add_argument("--eval_closed", type=int, default=0, help="also evaluate the closed-loop readout on this many held-out recharge-needed tasks")
     ap.add_argument("--null_k", type=int, default=0, help="null-partner test: train each drone only on what the reward needed (0 = off)")
@@ -344,9 +345,13 @@ def main():
     start_round = 0
     if args.resume:
         ck = torch.load(args.resume)
-        model.load_state_dict(ck["model"])
+        model.load_state_dict(ck.get("raw", ck["model"]))
         opt.load_state_dict(ck["opt"])
         start_round = ck.get("round", 0)
+    import copy
+    ema_model = copy.deepcopy(model) if args.ema > 0 else model
+    if args.resume and args.ema > 0 and "ema" in ck:
+        ema_model.load_state_dict(ck["ema"])
     buf = Buffer(args.buf, cfg)
     print(f"params: {sum(p.numel() for p in model.parameters())}", flush=True)
 
@@ -379,7 +384,7 @@ def main():
         s, r, g = s[keep][:N], r[keep][:N], g[keep][:N]
         need = manhattan(s, g) > cfg.B
         with torch.no_grad():
-            logits = grow(model, s, r, g, cfg, args.K, args.amp)
+            logits = grow(ema_model, s, r, g, cfg, args.K, args.amp)
             ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen, ez=args.ez, shared=shared_v)
         best_time, best_roll, fv = hindsight_table(ro, N, M, cfg)
         gc = cell_of(g, cfg)
@@ -475,6 +480,10 @@ def main():
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 opt.step()
+                if args.ema > 0:
+                    with torch.no_grad():
+                        for pe, p in zip(ema_model.parameters(), model.parameters()):
+                            pe.mul_(args.ema).add_(p, alpha=1 - args.ema)
                 losses.append(loss.item())
         stats["loss"] = sum(losses) / len(losses) if losses else float("nan")
         stats["time"] = time.time() - t0
@@ -484,13 +493,13 @@ def main():
                 ema[k] = v if k not in ema else 0.95 * ema[k] + 0.05 * v
 
         if rnd % args.eval_every == 0 or rnd == args.rounds - 1:
-            ev = evaluate(model, val_need, cfg, args.K, args.amp)
-            ee = evaluate(model, val_easy, cfg, args.K, args.amp)
+            ev = evaluate(ema_model, val_need, cfg, args.K, args.amp)
+            ee = evaluate(ema_model, val_easy, cfg, args.K, args.amp)
             stats["val_need"] = float(ev["success"].float().mean())
             stats["val_easy"] = float(ee["success"].float().mean())
             if args.eval_closed > 0:
                 nc = args.eval_closed
-                ec = evaluate_closed(model, tuple(x[:nc] for x in val_need), cfg, args.K, args.amp)
+                ec = evaluate_closed(ema_model, tuple(x[:nc] for x in val_need), cfg, args.K, args.amp)
                 stats["val_need_closed"] = float(ec["success"].float().mean())
                 stats["val_need_open_sub"] = float(ev["success"][:nc].float().mean())
             print(f"[{rnd:5d}] t={stats['time']:.0f}s loss={ema.get('loss', float('nan')):.3f} "
@@ -499,17 +508,19 @@ def main():
                   f"VAL easy={stats['val_easy']:.2f} need={stats['val_need']:.3f} closed={stats.get('val_need_closed', float('nan')):.3f} "
                   f"buf={buf.n} need={stats['buf_need']:.2f} hard={stats['buf_hard']:.2f} tau={stats['buf_tau']:.1f} alive={stats['alive_T']:.1f}",
                   flush=True)
-            torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), round=rnd + 1, args=vars(args)),
-                       os.path.join(out_dir, "ckpt.pt"))
+            torch.save(dict(model=ema_model.state_dict(), raw=model.state_dict(), ema=ema_model.state_dict(), opt=opt.state_dict(),
+                            round=rnd + 1, args=vars(args)), os.path.join(out_dir, "ckpt.pt"))
             score = stats.get("val_need_closed", stats["val_need"])
             if score >= ema.get("best_val", -1):
                 ema["best_val"] = score
-                torch.save(dict(model=model.state_dict(), round=rnd + 1, args=vars(args), val_need=stats["val_need"]),
-                           os.path.join(out_dir, "best.pt"))
+                torch.save(dict(model=ema_model.state_dict(), round=rnd + 1, args=vars(args), val_need=stats["val_need"],
+                                val_need_closed=stats.get("val_need_closed")), os.path.join(out_dir, "best.pt"))
+            if rnd % 100 == 0:
+                torch.save(dict(model=ema_model.state_dict(), round=rnd + 1, args=vars(args)), os.path.join(out_dir, f"ckpt_{rnd:05d}.pt"))
         logf.write(json.dumps(stats) + "\n")
         logf.flush()
 
-    ev = evaluate(model, test_need, cfg, args.K, args.amp)
+    ev = evaluate(ema_model, test_need, cfg, args.K, args.amp)
     print(f"FINAL test_need success = {float(ev['success'].float().mean()):.3f}", flush=True)
 
 
