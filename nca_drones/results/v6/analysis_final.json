@@ -1,0 +1,208 @@
+{
+ "ckpt": "runs/v6/best_final.pt",
+ "round": 901,
+ "K": 32,
+ "test200_closed_loop": {
+  "success": 0.885,
+  "k": 177,
+  "n": 200,
+  "ci95": [
+   0.833,
+   0.922
+  ]
+ },
+ "test200_open_loop_dream": {
+  "success": 0.845,
+  "k": 169,
+  "n": 200,
+  "ci95": [
+   0.788,
+   0.889
+  ]
+ },
+ "test200_closed_breakdown": {
+  "outcomes": {
+   "success": 0.885,
+   "never_met": 0.115,
+   "met_then_died": 0.0,
+   "timeout": 0.0
+  },
+  "by_target_distance": {
+   "6": [
+    59,
+    67
+   ],
+   "7": [
+    39,
+    44
+   ],
+   "8": [
+    32,
+    32
+   ],
+   "9": [
+    25,
+    27
+   ],
+   "10": [
+    15,
+    18
+   ],
+   "11": [
+    4,
+    5
+   ],
+   "12": [
+    3,
+    5
+   ],
+   "13": [
+    0,
+    2
+   ]
+  },
+  "by_recharger_distance": {
+   "1": [
+    7,
+    7
+   ],
+   "2": [
+    18,
+    21
+   ],
+   "3": [
+    36,
+    36
+   ],
+   "4": [
+    25,
+    25
+   ],
+   "5": [
+    24,
+    24
+   ],
+   "6": [
+    32,
+    33
+   ],
+   "7": [
+    23,
+    28
+   ],
+   "8": [
+    7,
+    10
+   ],
+   "9": [
+    5,
+    13
+   ],
+   "10": [
+    0,
+    3
+   ]
+  }
+ },
+ "fresh_1000": {
+  "disjoint_from_training": false,
+  "closed_loop": {
+   "success": 0.849,
+   "per_seed": [
+    0.845,
+    0.865,
+    0.845,
+    0.85,
+    0.84
+   ],
+   "ci95": [
+    0.825,
+    0.87
+   ]
+  },
+  "open_loop": {
+   "success": 0.834,
+   "per_seed": [
+    0.86,
+    0.835,
+    0.82,
+    0.82,
+    0.835
+   ],
+   "ci95": [
+    0.81,
+    0.856
+   ]
+  }
+ },
+ "open_loop_test_vs_iterations": {
+  "K=24": 0.8299999833106995,
+  "K=28": 0.8399999737739563,
+  "K=32": 0.8450000286102295,
+  "K=36": 0.8450000286102295,
+  "K=40": 0.8600000143051147,
+  "K=48": 0.8500000238418579,
+  "K=32_fp32": 0.8450000286102295
+ },
+ "tube_diagnostics": {
+  "seeker": {
+   "slice_argmax_is_executed_cell": 0.951,
+   "softmax_mass_on_executed_cell": 0.599,
+   "slice_argmax_moves_at_most_one_cell": 0.966
+  },
+  "recharger": {
+   "slice_argmax_is_executed_cell": 0.972,
+   "softmax_mass_on_executed_cell": 0.556,
+   "slice_argmax_moves_at_most_one_cell": 0.962
+  }
+ },
+ "easy_200_closed_loop": 1.0,
+ "lesions": {
+  "open_loop": 0.8450000286102295,
+  "recharger_hovers": 0.04500000178813934,
+  "seeker_tube_changes_without_recharger": 0.9800000190734863
+ },
+ "battery_probe": {
+  "n_points": 2105,
+  "r2_from_time_index": 0.16122376918792725,
+  "r2_from_hidden": 0.5317821502685547,
+  "r2_from_hidden_plus_time": 0.5604549646377563,
+  "after_step_B": {
+   "n": 1105,
+   "r2_from_time_index": -0.5849947929382324,
+   "r2_from_hidden": -0.3807569742202759
+  }
+ },
+ "meet_rate_by_target_distance": {
+  "1": 0.043,
+  "2": 0.138,
+  "3": 0.233,
+  "4": 0.36,
+  "5": 0.461,
+  "6": 0.823,
+  "7": 0.866,
+  "8": 0.842,
+  "9": 0.894,
+  "10": 0.805,
+  "11": 0.727,
+  "12": 0.714,
+  "13": 0.6,
+  "14": 0.0
+ },
+ "success_by_target_distance_open": {
+  "1": 1.0,
+  "2": 1.0,
+  "3": 1.0,
+  "4": 1.0,
+  "5": 0.991,
+  "6": 0.813,
+  "7": 0.866,
+  "8": 0.827,
+  "9": 0.894,
+  "10": 0.805,
+  "11": 0.727,
+  "12": 0.643,
+  "13": 0.4,
+  "14": 0.0
+ }
+}

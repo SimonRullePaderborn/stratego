@@ -16,3 +16,8 @@ Run under test: `v10` (audited path, `--strict 1`, seed 0), trained from scratch
    statement, a 95% lower confidence bound above 75% on the 2000 new tasks.
 
 The ablation `v11_noshared` (same, `--shared 0`) is evaluated the same way with its own `best.pt`.
+
+**Stopping rule (added at v10 round ~600, before any evaluation on the tasks above):** v10 and
+`v11_noshared` are each evaluated once, with the `best.pt` that exists when the run reaches round 900
+(the round at which the earlier run v6 was stopped). No earlier or later checkpoint is evaluated on
+the test set or on the 2000 new tasks.

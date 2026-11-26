@@ -1,0 +1,1 @@
+{"name": "v1", "rounds": 1500, "C": 16, "hid": 64, "update": "res", "fire_rate": 1.0, "K": 32, "K_jitter": 4, "N": 64, "M": 64, "G": 3, "bs": 32, "lr": 0.002, "buf": 20000, "eps_max": 0.4, "temp": 1.0, "amp": 1, "seed": 0, "eval_every": 25, "B": 5, "T": 20, "need_frac": -1.0, "resume": ""}
