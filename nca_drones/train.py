@@ -626,8 +626,9 @@ def main():
         logf.write(json.dumps(stats) + "\n")
         logf.flush()
 
-    ev = evaluate(ema_model, test_need, cfg, args.K, args.amp)
-    print(f"FINAL test_need success = {float(ev['success'].float().mean()):.3f}", flush=True)
+    # The test set (seed 12345) is deliberately NOT evaluated here: it is looked at once, by analyze.py, for the
+    # checkpoint that validation selected.
+    print("training finished", flush=True)
 
 
 if __name__ == "__main__":
