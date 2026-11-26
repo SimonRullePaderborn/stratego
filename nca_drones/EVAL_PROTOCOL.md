@@ -21,3 +21,18 @@ The ablation `v11_noshared` (same, `--shared 0`) is evaluated the same way with 
 `v11_noshared` are each evaluated once, with the `best.pt` that exists when the run reaches round 900
 (the round at which the earlier run v6 was stopped). No earlier or later checkpoint is evaluated on
 the test set or on the 2000 new tasks.
+
+## Outcome of the pre-registered evaluation
+
+* v10 (`best.pt` at round 900 = the round-850 checkpoint): test 164/200 closed-loop, 158/200 open-loop;
+  2000 new tasks 1507/2000 = 75.35% closed-loop (95% CI 73.4-77.2), 1467/2000 = 73.35% open-loop.
+  Criterion part 1 (>= 75% on the 200-task test set): **met**. Criterion part 2 (lower confidence
+  bound above 75% on the 2000 new tasks): **not met**.
+* v11_noshared (`best.pt` at round 900): test 135/200 and 134/200; 2000 new tasks 65.45% and 63.75%.
+
+## Follow-up, declared after seeing the outcome above
+
+v10 is continued from its round-900 state to round 1500 as `v10b` (same flags; the replay buffer
+restarts empty). Its `best.pt` at the end of training is evaluated once on 2000 further new tasks,
+seeds 3001..3010, with the same filters. This is a separate, later claim about a longer run; it does
+not replace the result above, and the original test set is not re-used for it.

@@ -6,7 +6,13 @@ on the way, and a **recharger** drone that has to come and meet it. Everything i
 a simulator and its sparse 0/1 reward. No solver, no dynamic programming, no distance
 features, no shaped reward, no demonstrations, and the battery is never shown to the network.
 
-**Result.** RESULT_SUMMARY
+**Result.** The audited run (v10, 900 training rounds, about 2.3 hours on 2 CPU threads) solves
+**164 of 200 held-out recharge-needed tasks (82.0%)** with the closed-loop readout and 158 of 200
+(79.0%) with the open-loop dream, so the stated bar of 75% on 200 held-out tasks is cleared. That
+test set turned out to be an easy draw: on 2,000 further tasks that were never posed during training
+the same checkpoint reaches **75.4% closed-loop** (95% interval 73.4-77.2) and 73.4% open-loop. An
+earlier run of the same recipe (v6) reached 88.5% / 84.5% on the test set and about 85% / 83% on
+1,000 fresh tasks, but still contained two hand-written credit rules that v10 removes.
 
 Read [What is and is not hand-made](#what-is-and-is-not-hand-made) before quoting the number:
 the network is a plain NCA, but the search around it contains design choices, and one of them
@@ -74,7 +80,56 @@ highest tube logit in slice t+1. That is the whole controller. Two readouts are 
 
 ## Results
 
-RESULTS_SECTION
+All numbers are greedy: one readout per task, no sampling and no search at test time.
+"Test" is the 200-task set fixed before any model existed (seed 12345) and excluded from training.
+"New" are 2,000 tasks from seeds fixed in advance (`EVAL_PROTOCOL.md`), with every task that was ever
+posed during training removed. Intervals are Wilson 95%.
+
+| run | readout | test, 200 tasks | new, 2,000 tasks (never posed in training) |
+|---|---|---|---|
+| **v10** audited recipe | closed-loop | **164/200 = 82.0%** (76.1-86.7) | **1507/2000 = 75.4%** (73.4-77.2) |
+| | open-loop dream | 158/200 = 79.0% (72.8-84.1) | 1467/2000 = 73.4% (71.4-75.2) |
+| v11 = v10 without shared noise | closed-loop | 135/200 = 67.5% | 1309/2000 = 65.5% (63.3-67.5) |
+| | open-loop dream | 134/200 = 67.0% | 1275/2000 = 63.8% (61.6-65.8) |
+| v6, earlier recipe, round 900 | closed-loop | 177/200 = 88.5% | 84.9% on 1,000 fresh tasks (not filtered against training) |
+| | open-loop dream | 169/200 = 84.5% | 83.4% on the same 1,000 |
+
+In full precision (fp32 instead of the bfloat16 used in training) v10 gives 165/200 and 159/200 on
+the test set and 1507/2000 and 1471/2000 on the new tasks.
+
+How to read this:
+
+* **The stated criterion is met** by two runs trained from scratch (v6 and v10) on the held-out
+  200-task test set, with either readout.
+* **As a population statement the audited run sits at the bar, not clearly above it.** The 200-task
+  test set contains few far-recharger tasks (13% with the recharger 8 or more cells away, against
+  20% in the population), which flatters every model by about 6 points. I pre-registered the stronger
+  requirement "lower confidence bound above 75% on the 2,000 new tasks"; v10 does **not** meet it
+  (lower bound 73.4%). On 1,000 further unseen tasks (seeds 101-505) it scores 77.5%.
+* v10 learned the same things as v6 about 100-150 rounds later (see `results/curves.png`), and both
+  were stopped at round 900. v6's later checkpoints are what a longer v10 run would be expected to
+  look like, but that has not been shown for the audited recipe.
+* One-battery tasks: 100% for both runs.
+* A continuation of v10 to 1,500 rounds (`v10b`) was started after this evaluation. It is to be
+  judged once on a further 2,000 new tasks (seeds 3001-3010, see `EVAL_PROTOCOL.md`); no result yet.
+
+Success by where the recharger starts (v10, closed-loop, 2,000 new tasks):
+
+| seeker-recharger distance | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| success | 76% | 84% | 83% | 84% | 91% | 88% | 73% | 59% | 40% | 12% |
+
+Robustness of the open-loop dream to the number of iterations (test set; trained at K = 28-36):
+
+| K | 24 | 28 | 32 | 36 | 40 | 48 |
+|---|---|---|---|---|---|---|
+| v10 | 77.0% | 76.5% | 79.0% | 78.0% | 78.0% | 70.5% |
+| v6 | 83.0% | 84.0% | 84.5% | 84.5% | 86.0% | 85.0% |
+
+v10's volume degrades when iterated 50% longer than in training; v6's did not. The grown pattern is
+therefore not guaranteed to be a stable fixed point.
+
+![learning curves](results/curves.png)
 
 ## What made it learnable
 
@@ -88,9 +143,9 @@ recharge-needed validation tasks.
 | v2 | + hindsight relabelling (every cell the seeker reached alive is a rewarded target) | Learns faster and **discovers the battery**: the seeker flies to the recharger to stay alive. But it settles into a degenerate convention: the recharger never moves and the seeker camps around it. 7%. |
 | v4 | + shared exploration noise, + credit by counterfactual replay | Step change: 30% after 100 rounds (8 minutes). The recharger now flies to intercept and the two escort each other. Remaining failures are timing errors of one cell. |
 | v5 / v6 | + past burned in, closed-loop readout; v5 keeps hindsight and label pruning, v6 drops both | The stricter variant wins clearly (55% vs 18% at round 150). Hindsight floods the buffer with easy examples. |
-| v6 | run on to 900 rounds | 88.5% closed-loop / 84.5% open-loop on the held-out test set. |
-| v10 | audited rerun: reward straight from the simulator's step, credit computed with the real simulator | V10_ROW |
-| v11 | v10 without shared noise | V11_ROW |
+| v6 | run on to 900 rounds | 88.5% closed-loop / 84.5% open-loop on the held-out test set; first run to pass the bar (at round 600). |
+| v10 | audited rerun: reward straight from the simulator's step, credit computed with the real simulator | Same behaviour, about 100-150 rounds later: 82.0% closed-loop / 79.0% open-loop on the test set at round 900; 75.4% / 73.4% on 2,000 never-posed tasks. |
+| v11 | v10 without shared noise | Starts much slower (5% vs 14% of recharge-needed tasks with a rewarded rollout early on), then learns the same behaviour: 67.5% / 67.0% on the test set at round 900, 65.5% / 63.8% on 2,000 never-posed tasks. Many more "met, then died" failures: the escort is less reliable. |
 
 Three observations carry most of the weight.
 
@@ -108,7 +163,10 @@ and an n-step escort has probability about 5^-n. If the noise is a property of t
 one random field G(t, x, y) read by both drones - two drones on the same cell with similar
 tubes make the same move, so sampled worldlines coalesce. With a completely untrained
 tissue this raises the share of recharge-needed tasks with at least one rewarded rollout from
-about 1% to 12-19%. SHARED_ABLATION_SENTENCE
+about 1% to 12-19%. The ablation shows it is an
+accelerator rather than a requirement: without it the same behaviour is learned, about 10-15
+points lower at the same budget (65.5% against 75.4% on 2,000 new tasks at round 900), and the
+difference is mostly broken escorts.
 
 **3. A one-shot dream is good, but it is imprecise about time.** The open-loop volume gets
 the plan right and the timing wrong by a step: the recharger arrives one cell late, or the two
@@ -117,19 +175,22 @@ it, and the same mechanism is trained for free by seeding random prefixes of rew
 
 What the tissue ends up doing: both drones head for an early meeting (around step 3), then fly
 in formation to the target, recharging nearly every step. It is a rendezvous-and-escort
-convention, not explicit battery arithmetic. Evidence that the coupling is real:
+convention, not explicit battery arithmetic. Evidence that the coupling is real (v10; v6 in
+brackets):
 
-* Force the recharger to hover: success drops from 84.5% to 4.5%.
-* Delete the recharger from the observation: the seeker's tube changes in 98% of tasks.
-* The share of plans that contain a rendezvous jumps between target distance 5 and 6
-  (46% -> 82%), i.e. at the battery limit that was never shown.
-* No successful episode in any evaluation lacks a recharge.
-* The tubes are real worldlines, not a field rescued by the readout: the slice-wide arg-max is
-  the executed cell in 95% (seeker) and 97% (recharger) of slices, and moves by at most one
-  cell from slice to slice in 96%.
-* A linear probe of the hidden state at the seeker's voxel explains 53% of the variance of the
-  (never observed) battery level, against 16% from the time index alone. That is suggestive,
-  not proof of a battery variable.
+* Force the recharger to hover: open-loop success drops from 79% to 7% [84.5% to 4.5%].
+* Delete the recharger from the observation: the seeker's tube changes in 98% of tasks [98%].
+* The share of plans that contain a rendezvous jumps between target distance 5 and 6, from 52% to
+  79% [46% to 82%], i.e. at the battery limit that was never shown.
+* No successful episode in any evaluation, including the independent re-implementation, lacks a
+  recharge.
+* The tubes are worldlines, not a field rescued by the readout: the slice-wide arg-max is the
+  executed cell in 90% of seeker slices and 93% of recharger slices [95%, 97%], and it moves by at
+  most one cell from slice to slice in 94% and 88% [97%, 96%].
+* A linear probe of the hidden state at the seeker's voxel explains 34% of the variance of the
+  never-observed battery level, against 13% from the time index alone [53% against 16%]. After
+  step 5, where the battery is no longer a function of time, the hidden state still explains 30%
+  and time explains nothing. That is suggestive, not proof of a battery variable.
 
 ## What is and is not hand-made
 
@@ -155,8 +216,12 @@ audited path), label editing (in the audited path).
 
 Known limits:
 
-* Almost all remaining failures are tasks where the recharger starts 9-10 cells away, which
-  leaves zero or one step of slack for the rendezvous.
+* Most remaining failures are tasks where the recharger starts 8-10 cells away, which leaves at
+  most two steps of slack for the rendezvous (40% at distance 9, 12% at distance 10).
+* One training seed per recipe. v6 and v10 are two from-scratch runs of nearly the same method and
+  agree qualitatively, but there is no run-to-run variance estimate.
+* Validation curves are volatile from checkpoint to checkpoint (swings of 10-25 points early in
+  training); the reported checkpoints were selected on 100 validation tasks.
 * "Held out" means the exact (seeker, recharger, target) triple. Translated copies of most
   test tasks occur in training.
 * The earlier run v6 (the first to pass the bar) still contained two hand-written credit rules

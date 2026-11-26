@@ -1,14 +1,17 @@
 """Space-time Neural Cellular Automaton.
 
 One local update rule, shared by every voxel of a (t, x, y) lattice, iterated
-K times.  The only thing the lattice is told is the observation at t = 0
-(three one-hot maps in slice 0: seeker, recharger, target).  Everything else
-- the target's persistence through time, any notion of distance, the battery,
-the recharge coupling - has to be invented by the rule in its hidden channels.
+K times.  The lattice is told the observation at t = 0 (three one-hot maps in
+slice 0: seeker, recharger, target) and, in closed-loop mode only, where the two
+drones have actually been in the slices of the past.  Everything else - the
+target's persistence through time, any notion of distance, the battery, the
+recharge coupling - has to be invented by the rule in its hidden channels.
 
-Perception is a plain 3x3x3 convolution with zero padding (so walls and the
-first/last time slice are visible only as the absence of neighbours), followed
-by a per-voxel MLP.  No coordinates, no pooling, no global operations.
+Perception is a plain 3x3x3 convolution with zero padding, followed by a
+per-voxel MLP.  No coordinate channels, no pooling, no global operations.
+Note that zero padding on a bounded lattice does let a voxel work out where the
+walls and the first and last time slice are; position and time are therefore
+recoverable even though they are never given.
 """
 import torch
 import torch.nn as nn

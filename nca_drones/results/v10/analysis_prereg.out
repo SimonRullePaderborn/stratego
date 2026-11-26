@@ -1,0 +1,17 @@
+TEST (200 held-out recharge-needed tasks)  closed-loop: 164/200 = 0.820   open-loop dream: 158/200 = 0.790
+  outcomes: {'success': 0.82, 'never_met': 0.15, 'met_then_died': 0.01, 'timeout': 0.02}
+  by d(seeker,target):    {6: '54/67', 7: '40/44', 8: '29/32', 9: '23/27', 10: '11/18', 11: '4/5', 12: '3/5', 13: '0/2'}
+  by d(seeker,recharger): {1: '6/7', 2: '16/21', 3: '32/36', 4: '23/25', 5: '22/24', 6: '29/33', 7: '24/28', 8: '8/10', 9: '4/13', 10: '0/3'}
+[bf16] NEW 2000 (never posed in training: True): closed 1507/2000 = 0.7535 CI (0.7341376419904565, 0.7718903793860833)   open 1467/2000 = 0.7335 CI (0.7136886183066548, 0.7524160877739058)
+[bf16] TEST 200: closed 164/200   open 158/200
+[bf16] closed-loop by seeker-recharger distance: {1: '96/126', 2: '191/228', 3: '180/216', 4: '198/237', 5: '253/277', 6: '246/281', 7: '175/240', 8: '103/175', 9: '55/139', 10: '10/81'}
+[fp32] NEW 2000 (never posed in training: True): closed 1507/2000 = 0.7535 CI (0.7341376419904565, 0.7718903793860833)   open 1471/2000 = 0.7355 CI (0.7157311842582595, 0.754365853351899)
+[fp32] TEST 200: closed 165/200   open 159/200
+[fp32] closed-loop by seeker-recharger distance: {1: '94/126', 2: '190/228', 3: '181/216', 4: '199/237', 5: '251/277', 6: '245/281', 7: '175/240', 8: '104/175', 9: '58/139', 10: '10/81'}
+FRESH 5x200 recharge-needed tasks (never posed in training: True)  closed-loop 775/1000 = 0.775 [0.805, 0.76, 0.8, 0.73, 0.78]   open-loop 722/1000 = 0.722 [0.7, 0.75, 0.76, 0.685, 0.715]
+open-loop test success vs iterations / precision: {'K=24': 0.7699999809265137, 'K=28': 0.7649999856948853, 'K=32': 0.7900000214576721, 'K=36': 0.7799999713897705, 'K=40': 0.7799999713897705, 'K=48': 0.7049999833106995, 'K=32_fp32': 0.7950000166893005}
+tube diagnostics: {'seeker': {'slice_argmax_is_executed_cell': 0.903, 'softmax_mass_on_executed_cell': 0.514, 'slice_argmax_moves_at_most_one_cell': 0.938}, 'recharger': {'slice_argmax_is_executed_cell': 0.926, 'softmax_mass_on_executed_cell': 0.472, 'slice_argmax_moves_at_most_one_cell': 0.875}}
+one-battery tasks, closed-loop: 1.000
+lesions: {'open_loop': 0.7900000214576721, 'recharger_hovers': 0.07000000029802322, 'seeker_tube_changes_without_recharger': 0.9800000190734863}
+battery probe: {'n_points': 2009, 'r2_from_time_index': 0.12999564409255981, 'r2_from_hidden': 0.3353801965713501, 'r2_from_hidden_plus_time': 0.36032789945602417, 'after_step_B': {'n': 1009, 'r2_from_time_index': -0.02238142490386963, 'r2_from_hidden': 0.3008807301521301}}
+share of plans with a rendezvous, by d(seeker,target): {1: 0.043, 2: 0.11, 3: 0.238, 4: 0.385, 5: 0.525, 6: 0.793, 7: 0.797, 8: 0.752, 9: 0.742, 10: 0.683, 11: 0.5, 12: 0.571, 13: 0.8, 14: 0.0}

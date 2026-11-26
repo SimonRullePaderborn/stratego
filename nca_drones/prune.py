@@ -1,20 +1,15 @@
-"""Interventional credit assignment: which parts of a rewarded joint rollout mattered?
+"""EARLIER EXPERIMENT - not used by the audited training path (`train.py --strict 1`).
 
-A sparse reward only says "this joint rollout worked".  It does not say which
-of the two drones' movements caused it.  We ask the simulator: remove a piece
-of the rollout and replay it; if the reward still arrives (and no later), that
-piece was not needed and is dropped.  What survives is the causally necessary
-skeleton of the joint plan.
+Label pruning: remove pieces of a rewarded joint rollout (recharger movement,
+loops) whose removal still earns the reward no later.  It was tried together
+with hindsight relabelling (runs v3-v5) and made learning worse than leaving
+rewarded rollouts untouched.
 
-Interventions tried (all judged only by the simulator's 0/1 reward):
-  * recharger freeze: the recharger stops moving after time t* (smallest t* that keeps the reward),
-  * seeker loop cut: if the seeker returns to a cell it was on before, drop the loop
-    (the rest of its path happens earlier),
-  * recharger loop cut: same for the recharger (it arrives earlier and waits).
-
-No distances, no battery knowledge, no solver: an intervention is accepted iff
-`arrival_time` (a line-by-line mirror of DroneEnv.step, tested against it)
-returns a reward.
+Honest note on purity: `arrival_time` below is a hand-written copy of the
+simulator's step rule, including the battery and B, and `credit_batch` uses a
+co-location test to bound the recharger's loss-weight window.  An independent
+audit flagged both as domain knowledge inside learner code.  The audited path
+replaces all of it by `credit.py`, which only calls the real simulator.
 """
 import torch
 
