@@ -132,12 +132,13 @@ def partner_relevance(ps, g, r0, cfg, K, rng):
     return miss / K
 
 
-def prune_batch(ro, roll, tau, gcell, cfg, null_k=0, rng=None, post_w=0.0):
+def prune_batch(ro, roll, tau, gcell, cfg, null_k=0, rng=None, post_w=0.0, edit=True):
     """Prune selected rollouts and work out which parts of them carry credit.
 
     Returns labels [k, 2, T+1], per-slice loss weights [k, 2, T+1], new tau [k],
     recharger stop time [k], recharger relevance [k].
 
+    edit=False leaves the rollout untouched (no loop cutting, no freezing) and only computes weights.
     With null_k == 0 every slice has weight 1 (plain imitation of the pruned rollout).
     With null_k  > 0:
       * seeker slices 1..tau carry weight 1 (its path earned the reward),
@@ -157,7 +158,11 @@ def prune_batch(ro, roll, tau, gcell, cfg, null_k=0, rng=None, post_w=0.0):
     stop = torch.zeros(k, dtype=torch.long)
     rel = torch.ones(k)
     for i in range(k):
-        ps, pr, ts = prune(cs[i][: taus[i] + 1], cr[i][: taus[i] + 1], gs[i], cfg.B, cfg.T)
+        if edit:
+            ps, pr, ts = prune(cs[i][: taus[i] + 1], cr[i][: taus[i] + 1], gs[i], cfg.B, cfg.T)
+        else:                       # strict mode: the rollout is imitated exactly as it happened
+            ps, pr = cs[i][: taus[i] + 1], cr[i][: taus[i] + 1]
+            ts = max([t for t in range(1, len(pr)) if pr[t] != pr[t - 1]] or [0])
         L = len(ps) - 1
         lab[i, 0] = torch.tensor(ps + [ps[-1]] * (cfg.T - L))
         lab[i, 1] = torch.tensor(pr + [pr[-1]] * (cfg.T - L))

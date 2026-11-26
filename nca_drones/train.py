@@ -198,6 +198,47 @@ def evaluate(model, tasks, cfg, K, amp=False):
     return out
 
 
+@torch.no_grad()
+def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
+    """Closed-loop readout: the environment is pushed through the dreamed volume.
+
+    At every step the positions the simulator actually produced are burned into
+    the past slices, the tissue regrows the future from scratch, and both
+    drones take the greedy step along their tubes.  The network never sees the
+    battery, the reward or a done flag - only where the two drones have been.
+    """
+    model.eval()
+    s, r, g = tasks
+    n = s.shape[0]
+    env = DroneEnv(s, r, g, cfg)
+    hist = torch.zeros(n, 2, cfg.T + 1, dtype=torch.long)
+    hist[:, 0, 0] = s[:, 0] * cfg.W + s[:, 1]
+    hist[:, 1, 0] = r[:, 0] * cfg.W + r[:, 1]
+    logits = None
+    for t in range(cfg.T):
+        act = torch.nonzero(~env.done).squeeze(1)
+        if len(act) == 0:
+            break
+        if t % stride == 0:
+            logits = torch.zeros(n, 2, cfg.T + 1, cfg.H, cfg.W)
+            for i in range(0, len(act), bs):
+                j = act[i:i + bs]
+                cond = make_cond(s[j], r[j], g[j], cfg, hist[j], torch.full((len(j),), t))
+                with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
+                    lg, _ = model(cond, K)
+                logits[j] = lg.float()
+        acts = []
+        for d, pos in ((0, env.ps), (1, env.pr)):
+            c = env.cand(pos)
+            lg = logits[torch.arange(n)[:, None], d, t + 1, c[..., 0], c[..., 1]]
+            acts.append(lg.argmax(1))
+        env.step(acts[0], acts[1])
+        hist[:, 0, t + 1] = env.ps[:, 0] * cfg.W + env.ps[:, 1]
+        hist[:, 1, t + 1] = env.pr[:, 0] * cfg.W + env.pr[:, 1]
+    model.train()
+    return dict(success=env.success.clone(), tau=env.tau.clone(), n_recharge=env.n_recharge.clone(), hist=hist)
+
+
 class Buffer:
     """FIFO replay of rewarded joint rollouts."""
 
@@ -271,7 +312,10 @@ def main():
     ap.add_argument("--hind", type=int, default=2, help="hindsight targets added per task and round (0 = off)")
     ap.add_argument("--hard_frac", type=float, default=-1.0, help="share of each batch drawn from samples where search beat the greedy readout")
     ap.add_argument("--taps", type=int, default=0, help="deep supervision: also apply the loss this many iterations before the end")
-    ap.add_argument("--prune", type=int, default=0, help="simulator-verified pruning of rewarded rollouts (interventional credit assignment)")
+    ap.add_argument("--prune", type=int, default=0, help="1: simulator-verified pruning of rewarded rollouts; 2: no label editing, credit weights only")
+    ap.add_argument("--threads", type=int, default=0)
+    ap.add_argument("--prefix", type=float, default=0.0, help="share of training samples seeded with a random-length realised past (the tissue regrows the future)")
+    ap.add_argument("--eval_closed", type=int, default=0, help="also evaluate the closed-loop readout on this many held-out recharge-needed tasks")
     ap.add_argument("--null_k", type=int, default=0, help="null-partner test: train each drone only on what the reward needed (0 = off)")
     ap.add_argument("--post_w", type=float, default=0.0, help="loss weight of slices after the reward (only with --null_k)")
     ap.add_argument("--shared", type=float, default=0.0, help="share of rollouts whose sampling noise is a shared random medium on the voxels")
@@ -280,6 +324,8 @@ def main():
     args = ap.parse_args()
 
     cfg = Cfg(T=args.T, B=args.B)
+    if args.threads > 0:
+        torch.set_num_threads(args.threads)
     torch.manual_seed(args.seed)
     gen = torch.Generator().manual_seed(args.seed)
     out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs", args.name)
@@ -346,7 +392,7 @@ def main():
             tau_i = best_time[i, gc[i]]
             wts = None
             if args.prune:
-                lab, wts, tau_p, stop, rel = prune_batch(ro, best_roll[i, gc[i]], tau_i, gc[i], cfg, args.null_k, rng, args.post_w)
+                lab, wts, tau_p, stop, rel = prune_batch(ro, best_roll[i, gc[i]], tau_i, gc[i], cfg, args.null_k, rng, args.post_w, edit=args.prune == 1)
                 assert bool(verify_labels(s[i], r[i], g[i], lab, tau_p, cfg).all())
                 pr_stats.append((tau_i.float().mean(), tau_p.float().mean(), (stop > 0).float().mean(),
                                  (stop[need[i]] > 0).float().mean() if need[i].any() else torch.tensor(float("nan")),
@@ -376,7 +422,7 @@ def main():
                 tau_h = best_time[ti, ci]
                 wts_h = None
                 if args.prune:
-                    lab, wts_h, tau_h, stop_h, rel_h = prune_batch(ro, best_roll[ti, ci], tau_h, ci, cfg, args.null_k, rng, args.post_w)
+                    lab, wts_h, tau_h, stop_h, rel_h = prune_batch(ro, best_roll[ti, ci], tau_h, ci, cfg, args.null_k, rng, args.post_w, edit=args.prune == 1)
                     assert bool(verify_labels(s[ti], r[ti], hg, lab, tau_h, cfg).all())
                 else:
                     lab = make_labels(ro, best_roll[ti, ci], tau_h, cfg)
@@ -407,7 +453,17 @@ def main():
         if buf.n >= args.bs:
             for _ in range(args.G):
                 bs_, br_, bg_, blab, bw = buf.sample(args.bs, gen, args.hard_frac if args.hard_frac >= 0 else None)
-                cond = make_cond(bs_, br_, bg_, cfg)
+                if args.prefix > 0:
+                    # burn a random-length prefix of the rewarded rollout into the past; learn to regrow the rest
+                    w_any = (bw[:, 0] > 0).float()
+                    tau_b = (w_any * torch.arange(cfg.T + 1)[None]).amax(1).long().clamp(min=1)     # last credited seeker slice
+                    use = torch.rand(args.bs, generator=gen) < args.prefix
+                    tp = (torch.rand(args.bs, generator=gen) * tau_b.float()).long()                # uniform in [0, tau-1]
+                    tp = torch.where(use, tp, torch.zeros_like(tp))
+                    cond = make_cond(bs_, br_, bg_, cfg, blab, tp)
+                    bw = bw * (torch.arange(cfg.T + 1)[None, None] > tp[:, None, None]).float()
+                else:
+                    cond = make_cond(bs_, br_, bg_, cfg)
                 K = args.K + int(torch.randint(-args.K_jitter, args.K_jitter + 1, (1,), generator=gen))
                 taps = (K - args.taps,) if args.taps > 0 else ()
                 with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(args.amp)):
@@ -432,16 +488,22 @@ def main():
             ee = evaluate(model, val_easy, cfg, args.K, args.amp)
             stats["val_need"] = float(ev["success"].float().mean())
             stats["val_easy"] = float(ee["success"].float().mean())
+            if args.eval_closed > 0:
+                nc = args.eval_closed
+                ec = evaluate_closed(model, tuple(x[:nc] for x in val_need), cfg, args.K, args.amp)
+                stats["val_need_closed"] = float(ec["success"].float().mean())
+                stats["val_need_open_sub"] = float(ev["success"][:nc].float().mean())
             print(f"[{rnd:5d}] t={stats['time']:.0f}s loss={ema.get('loss', float('nan')):.3f} "
                   f"search e/n={ema.get('search_easy', 0):.2f}/{ema.get('search_need', 0):.2f} "
                   f"greedy e/n={ema.get('greedy_easy', 0):.2f}/{ema.get('greedy_need', 0):.2f} "
-                  f"VAL easy={stats['val_easy']:.2f} need={stats['val_need']:.3f} "
+                  f"VAL easy={stats['val_easy']:.2f} need={stats['val_need']:.3f} closed={stats.get('val_need_closed', float('nan')):.3f} "
                   f"buf={buf.n} need={stats['buf_need']:.2f} hard={stats['buf_hard']:.2f} tau={stats['buf_tau']:.1f} alive={stats['alive_T']:.1f}",
                   flush=True)
             torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), round=rnd + 1, args=vars(args)),
                        os.path.join(out_dir, "ckpt.pt"))
-            if stats["val_need"] >= ema.get("best_val", -1):
-                ema["best_val"] = stats["val_need"]
+            score = stats.get("val_need_closed", stats["val_need"])
+            if score >= ema.get("best_val", -1):
+                ema["best_val"] = score
                 torch.save(dict(model=model.state_dict(), round=rnd + 1, args=vars(args), val_need=stats["val_need"]),
                            os.path.join(out_dir, "best.pt"))
         logf.write(json.dumps(stats) + "\n")

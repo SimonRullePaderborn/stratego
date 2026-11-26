@@ -82,12 +82,27 @@ class SpaceTimeNCA(nn.Module):
         return logits, s
 
 
-def make_cond(s, r, g, cfg):
-    """Observation seed: one-hot maps for seeker / recharger / target in slice t=0 only."""
+def make_cond(s, r, g, cfg, hist=None, t0=None):
+    """Observation seed.
+
+    Slice t=0 always holds three one-hot maps: seeker, recharger, target.
+    Optionally the REALISED PAST is burned in as well: for every slice
+    t <= t0 the seeker / recharger maps hold where the drones actually were
+    (hist [n, 2, T+1] cell indices, t0 [n]).  The tissue then has to grow the
+    future around a fixed past - nothing else about the world is told to it.
+    """
     n = s.shape[0]
     cond = torch.zeros(n, 3, cfg.T + 1, cfg.H, cfg.W)
     ar = torch.arange(n)
     cond[ar, 0, 0, s[:, 0], s[:, 1]] = 1.0
     cond[ar, 1, 0, r[:, 0], r[:, 1]] = 1.0
     cond[ar, 2, 0, g[:, 0], g[:, 1]] = 1.0
+    if hist is not None:
+        ts = torch.arange(cfg.T + 1)[None].expand(n, -1)
+        m = ts <= t0[:, None]                                  # [n,T+1] slices that are already history
+        flat = cond.reshape(n, 3, cfg.T + 1, cfg.H * cfg.W)
+        for d in (0, 1):
+            oh = F.one_hot(hist[:, d], cfg.H * cfg.W).float() * m[..., None]
+            flat[:, d] = torch.maximum(flat[:, d], oh)
+        cond = flat.reshape(n, 3, cfg.T + 1, cfg.H, cfg.W)
     return cond
