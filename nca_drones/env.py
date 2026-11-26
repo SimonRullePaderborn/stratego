@@ -70,10 +70,12 @@ class DroneEnv:
     """Batched simulator.  All tensors are [n, ...]."""
 
     def __init__(self, s, r, g, cfg):
+        """g = None runs the same physics without a target ("free flight"): the
+        episode then ends only on an empty battery or at t == T."""
         self.cfg = cfg
         self.ps = s.clone()
         self.pr = r.clone()
-        self.g = g.clone()
+        self.g = g.clone() if g is not None else None
         n = s.shape[0]
         self.n = n
         self.bat = torch.full((n,), cfg.B, dtype=torch.long)
@@ -103,7 +105,7 @@ class DroneEnv:
         meet = act & (self.ps == self.pr).all(-1)
         self.bat = torch.where(meet, torch.full_like(self.bat, cfg.B), self.bat)
         self.n_recharge += meet.long()
-        at_goal = (self.ps == self.g).all(-1)
+        at_goal = (self.ps == self.g).all(-1) if self.g is not None else torch.zeros(self.n, dtype=torch.bool)
         succ = act & at_goal
         fail = act & ~at_goal & ((self.bat <= 0) | (self.t >= cfg.T))
         self.success |= succ
@@ -111,3 +113,14 @@ class DroneEnv:
         self.tau = torch.where(ended, torch.full_like(self.tau, self.t), self.tau)
         self.done |= ended
         return succ.float()
+
+
+def replay(s, r, g, acts, cfg):
+    """Replay recorded joint actions [n, T, 2] against target g.  Returns (success, tau).
+
+    This is the reference for hindsight relabelling: a rollout counts as a
+    rewarded episode for target g exactly if this function says so."""
+    env = DroneEnv(s, r, g, cfg)
+    for t in range(acts.shape[1]):
+        env.step(acts[:, t, 0], acts[:, t, 1])
+    return env.success.clone(), env.tau.clone()

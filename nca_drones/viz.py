@@ -62,11 +62,12 @@ if __name__ == "__main__":
     ap.add_argument("--show", type=int, default=4)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--K", type=int, default=0)
+    ap.add_argument("--mode", default="need")
     args = ap.parse_args()
     model, cfg, a = load(args.ckpt)
     K = args.K or a["K"]
     gen = torch.Generator().manual_seed(args.seed)
-    s, r, g = sample_tasks(args.n, cfg, gen, "need")
+    s, r, g = sample_tasks(args.n, cfg, gen, args.mode)
     out = evaluate(model, (s, r, g), cfg, K, bool(a.get("amp", 0)))
     cats = classify(out, s, r, g, cfg)
     print("greedy on recharge-needed tasks:", {k: round(float(v.float().mean()), 3) for k, v in cats.items()})
