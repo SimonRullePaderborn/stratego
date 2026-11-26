@@ -107,10 +107,17 @@ def test_prune():
     sel = torch.randperm(len(ti), generator=gen)[:400]
     ti, ci = ti[sel], ci[sel]
     tau = best_time[ti, ci]
-    lab, tau_p, stop = prune_batch(ro, best_roll[ti, ci], tau, ci, cfg)
+    import random
+    lab, wts, tau_p, stop, rel = prune_batch(ro, best_roll[ti, ci], tau, ci, cfg, 8, random.Random(0))
     hg = torch.stack([ci // cfg.W, ci % cfg.W], -1)
     assert bool(verify_labels(s[ti], r[ti], hg, lab, tau_p, cfg).all())
     assert bool((tau_p <= tau).all())
+    easy = tau_p <= cfg.B
+    # a seeker that never needed a recharge must be judged independent of its partner
+    solo = torch.tensor([all(int(lab[j, 0, t]) != int(lab[j, 1, t]) for t in range(1, int(tau_p[j]) + 1)) for j in range(len(tau_p))])
+    assert bool((rel[solo] == 0).all()), "reward without any contact must not credit the recharger"
+    assert bool((wts[:, 0, 1] == 1).all()) and bool((wts[solo][:, 1] [:, 1:] == 0).all())
+    print(f"partner relevance: {float((rel > 0).float().mean()):.2%} of rewarded rollouts needed the recharger")
     print(f"pruning: mean arrival {tau.float().mean():.2f} -> {tau_p.float().mean():.2f}; recharger still moves in {(stop > 0).float().mean():.2%} of rollouts")
 
 

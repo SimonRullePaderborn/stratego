@@ -35,59 +35,82 @@ BIG = 10_000
 # --------------------------------------------------------------------------
 # steering from voxels
 # --------------------------------------------------------------------------
-def _steer(logits, tid, d, t, env, pos, eps, temp, greedy, gen, ex=None):
-    """One drone, one step: look at the tube logits of the reachable cells in slice t+1.
-
-    Exploration: with probability eps the drone ignores the tube.  If `ex` is
-    given the deviation is temporally extended (a random action held for a
-    random number of steps), otherwise it is a single uniformly random action."""
-    n = len(pos)
-    c = env.cand(pos)                                                   # [n,5,2]
-    lg = logits[tid[:, None], d, t + 1, c[..., 0], c[..., 1]].float()   # [n,5]
-    logq = F.log_softmax(lg / temp, -1)
-    if ex is None:
-        p = (1 - eps[:, None]) * logq.exp() + eps[:, None] / 5.0
-        a = torch.multinomial(p, 1, generator=gen).squeeze(1)
-    else:
-        a = torch.multinomial(logq.exp(), 1, generator=gen).squeeze(1)
-        start = (torch.rand(n, generator=gen) < eps) & (ex["left"][:, d] == 0)
-        new_a = torch.randint(0, 5, (n,), generator=gen)
-        new_len = torch.randint(1, ex["zmax"] + 1, (n,), generator=gen)
-        ex["act"][:, d] = torch.where(start, new_a, ex["act"][:, d])
-        ex["left"][:, d] = torch.where(start, new_len, ex["left"][:, d])
-        a = torch.where(ex["left"][:, d] > 0, ex["act"][:, d], a)
-        ex["left"][:, d] = (ex["left"][:, d] - 1).clamp(min=0)
-    a = torch.where(greedy, lg.argmax(1), a)
-    return a, logq[torch.arange(n), a]
-
-
-def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None, ez=0):
+def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None, ez=0, shared=None):
     """Run M simulator episodes per task against target g, steering from the grown volume.
 
     logits: [N, 2, T+1, H, W] tube logits (channel 0 seeker, 1 recharger).
+    At time t a drone on cell p looks at the cells it can reach and moves to one
+    of them according to the tube logits in slice t+1.
     g=None gives target-free flight (used by the search phase for hindsight).
+
+    Exploration (search phase only; evaluation is greedy):
+      eps    [n]  probability per step of starting a random excursion (a random
+                  action held for 1..ez steps; ez=0 -> a single random action),
+      temp   [n]  sampling temperature,
+      shared [n]  bool: the sampling noise is a property of the VOXEL, not of the
+                  drone - both drones read the same random field G(t,x,y) and the
+                  same excursion draws.  Two drones on the same cell whose tubes
+                  agree then make the same move, so they stay together.
     """
     N = s.shape[0]
     tid = torch.arange(N).repeat_interleave(M)
     n = N * M
+    arn = torch.arange(n)
     env = DroneEnv(s[tid], r[tid], g[tid] if g is not None else None, cfg)
     if eps is None:
         eps = torch.zeros(n)
     if greedy is None:
         greedy = torch.ones(n, dtype=torch.bool)
+    if shared is None:
+        shared = torch.zeros(n, dtype=torch.bool)
+    if not torch.is_tensor(temp):
+        temp = torch.full((n,), float(temp))
+    all_greedy = bool(greedy.all())
+    zmax = max(ez, 1)
+    ex_act = torch.zeros(n, 2, dtype=torch.long)
+    ex_left = torch.zeros(n, 2, dtype=torch.long)
     traj_s, traj_r, acts = [env.ps.clone()], [env.pr.clone()], []
     logp = torch.zeros(n)
     cum = [logp.clone()]
     ret = torch.zeros(n)
-    ex = dict(act=torch.zeros(n, 2, dtype=torch.long), left=torch.zeros(n, 2, dtype=torch.long), zmax=ez) if ez > 0 else None
+
+    def gumbel(*shape):
+        u = torch.rand(*shape, generator=gen).clamp_(1e-9, 1 - 1e-9)
+        return -torch.log(-torch.log(u))
+
     for t in range(cfg.T):
         active = ~env.done
-        a_s, lp_s = _steer(logits, tid, 0, t, env, env.ps, eps, temp, greedy, gen, ex)
-        a_r, lp_r = _steer(logits, tid, 1, t, env, env.pr, eps, temp, greedy, gen, ex)
-        logp = logp + torch.where(active, lp_s + lp_r, torch.zeros(n))
-        ret = ret + env.step(a_s, a_r)
+        step_acts = []
+        lp_t = torch.zeros(n)
+        if not all_greedy:
+            G = gumbel(n, cfg.H, cfg.W)
+            u = torch.rand(n, 2, generator=gen)
+            na = torch.randint(0, 5, (n, 2), generator=gen)
+            nl = torch.randint(1, zmax + 1, (n, 2), generator=gen)
+            u[:, 1] = torch.where(shared, u[:, 0], u[:, 1])
+            na[:, 1] = torch.where(shared, na[:, 0], na[:, 1])
+            nl[:, 1] = torch.where(shared, nl[:, 0], nl[:, 1])
+        for d, pos in ((0, env.ps), (1, env.pr)):
+            c = env.cand(pos)                                                   # [n,5,2] reachable cells
+            lg = logits[tid[:, None], d, t + 1, c[..., 0], c[..., 1]].float()   # [n,5] their tube logits
+            a = lg.argmax(1)
+            logq = F.log_softmax(lg / temp[:, None], -1)
+            if not all_greedy:
+                gs = G[arn[:, None], c[..., 0], c[..., 1]]
+                noise = torch.where(shared[:, None], gs, gumbel(n, 5))
+                a_s = (logq + noise).argmax(1)
+                start = (u[:, d] < eps) & (ex_left[:, d] == 0)
+                ex_act[:, d] = torch.where(start, na[:, d], ex_act[:, d])
+                ex_left[:, d] = torch.where(start, nl[:, d], ex_left[:, d])
+                a_s = torch.where(ex_left[:, d] > 0, ex_act[:, d], a_s)
+                ex_left[:, d] = (ex_left[:, d] - 1).clamp(min=0)
+                a = torch.where(greedy, a, a_s)
+            lp_t = lp_t + logq[arn, a]
+            step_acts.append(a)
+        logp = logp + torch.where(active, lp_t, torch.zeros(n))
+        ret = ret + env.step(step_acts[0], step_acts[1])
         traj_s.append(env.ps.clone()); traj_r.append(env.pr.clone())
-        acts.append(torch.stack([a_s, a_r], -1)); cum.append(logp.clone())
+        acts.append(torch.stack(step_acts, -1)); cum.append(logp.clone())
     return dict(
         traj_s=torch.stack(traj_s, 1), traj_r=torch.stack(traj_r, 1), acts=torch.stack(acts, 1),
         success=ret > 0, tau=env.tau.clone(), logp=logp, cumlogp=torch.stack(cum, 1), tid=tid,
@@ -133,11 +156,17 @@ def make_labels(ro, roll, tau, cfg):
     return torch.stack([ps[..., 0] * cfg.W + ps[..., 1], pr[..., 0] * cfg.W + pr[..., 1]], 1)
 
 
-def tube_loss(logits, labels, cfg):
-    """Per-time-slice cross-entropy: each slice is a distribution over cells."""
+def tube_loss(logits, labels, cfg, w=None):
+    """Per-time-slice cross-entropy: each slice is a distribution over cells.
+
+    w [n, 2, T+1]: per-slice credit weights (see prune.prune_batch)."""
     n = logits.shape[0]
     lg = logits.float().reshape(n, 2, cfg.T + 1, cfg.H * cfg.W)[:, :, 1:]
-    return F.cross_entropy(lg.reshape(-1, cfg.H * cfg.W), labels[:, :, 1:].reshape(-1))
+    ce = F.cross_entropy(lg.reshape(-1, cfg.H * cfg.W), labels[:, :, 1:].reshape(-1), reduction="none")
+    if w is None:
+        return ce.mean()
+    w = w[:, :, 1:].reshape(-1)
+    return (ce * w).sum() / w.sum().clamp(min=1.0)
 
 
 # --------------------------------------------------------------------------
@@ -178,15 +207,17 @@ class Buffer:
         self.r = torch.zeros(cap, 2, dtype=torch.long)
         self.g = torch.zeros(cap, 2, dtype=torch.long)
         self.lab = torch.zeros(cap, 2, cfg.T + 1, dtype=torch.long)
+        self.w = torch.ones(cap, 2, cfg.T + 1)
         self.hard = torch.zeros(cap, dtype=torch.bool)   # search found reward where the greedy readout got none
         self.meta = torch.zeros(cap, 3, dtype=torch.long)  # bookkeeping for logs only: tau, needs-recharge, source
         self.n = 0
         self.ptr = 0
 
-    def add(self, s, r, g, lab, hard, meta):
+    def add(self, s, r, g, lab, hard, meta, w=None):
         k = s.shape[0]
         idx = (self.ptr + torch.arange(k)) % self.cap
         self.s[idx], self.r[idx], self.g[idx], self.lab[idx], self.hard[idx], self.meta[idx] = s, r, g, lab, hard, meta
+        self.w[idx] = w if w is not None else 1.0
         self.ptr = int((self.ptr + k) % self.cap)
         self.n = min(self.n + k, self.cap)
 
@@ -205,7 +236,7 @@ class Buffer:
             idx = torch.cat([a, b])
         else:
             idx = torch.randint(self.n, (bs,), generator=gen)
-        return self.s[idx], self.r[idx], self.g[idx], self.lab[idx]
+        return self.s[idx], self.r[idx], self.g[idx], self.lab[idx], self.w[idx]
 
 
 def cell_of(p, cfg):
@@ -241,6 +272,9 @@ def main():
     ap.add_argument("--hard_frac", type=float, default=-1.0, help="share of each batch drawn from samples where search beat the greedy readout")
     ap.add_argument("--taps", type=int, default=0, help="deep supervision: also apply the loss this many iterations before the end")
     ap.add_argument("--prune", type=int, default=0, help="simulator-verified pruning of rewarded rollouts (interventional credit assignment)")
+    ap.add_argument("--null_k", type=int, default=0, help="null-partner test: train each drone only on what the reward needed (0 = off)")
+    ap.add_argument("--post_w", type=float, default=0.0, help="loss weight of slices after the reward (only with --null_k)")
+    ap.add_argument("--shared", type=float, default=0.0, help="share of rollouts whose sampling noise is a shared random medium on the voxels")
     ap.add_argument("--ez", type=int, default=0, help="temporally-extended exploration: max length of a random excursion (0 = single-step noise)")
     ap.add_argument("--resume", default="")
     args = ap.parse_args()
@@ -272,10 +306,17 @@ def main():
 
     # exploration levels for the M rollouts of each task; rollout 0 is the greedy readout
     N, M = args.N, args.M
-    eps = torch.linspace(0, args.eps_max, M).repeat(N)
+    n_sh = int(round(args.shared * (M - 1)))
+    n_in = M - 1 - n_sh
+    eps_m = torch.cat([torch.zeros(1), torch.linspace(0.02, args.eps_max, n_in), torch.linspace(0.0, args.eps_max, n_sh)])
+    temp_m = torch.cat([torch.ones(1 + n_in) * args.temp, torch.tensor([1.0, 2.0, 3.0]).repeat(n_sh // 3 + 1)[:n_sh]])
+    shared_m = torch.cat([torch.zeros(1 + n_in, dtype=torch.bool), torch.ones(n_sh, dtype=torch.bool)])
+    eps, temp_v, shared_v = eps_m.repeat(N), temp_m.repeat(N), shared_m.repeat(N)
     greedy = torch.zeros(N * M, dtype=torch.bool)
     greedy[::M] = True
     arN = torch.arange(N)
+    import random
+    rng = random.Random(args.seed)
 
     t0 = time.time()
     ema = {}
@@ -293,7 +334,7 @@ def main():
         need = manhattan(s, g) > cfg.B
         with torch.no_grad():
             logits = grow(model, s, r, g, cfg, args.K, args.amp)
-            ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, temp=args.temp, greedy=greedy, gen=gen, ez=args.ez)
+            ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen, ez=args.ez, shared=shared_v)
         best_time, best_roll, fv = hindsight_table(ro, N, M, cfg)
         gc = cell_of(g, cfg)
         # (a) the posed task
@@ -303,15 +344,18 @@ def main():
         if any_succ.any():
             i = torch.nonzero(any_succ).squeeze(1)
             tau_i = best_time[i, gc[i]]
+            wts = None
             if args.prune:
-                lab, tau_p, stop = prune_batch(ro, best_roll[i, gc[i]], tau_i, gc[i], cfg)
+                lab, wts, tau_p, stop, rel = prune_batch(ro, best_roll[i, gc[i]], tau_i, gc[i], cfg, args.null_k, rng, args.post_w)
                 assert bool(verify_labels(s[i], r[i], g[i], lab, tau_p, cfg).all())
-                pr_stats.append((tau_i.float().mean(), tau_p.float().mean(), (stop > 0).float().mean(), (stop[need[i]] > 0).float().mean() if need[i].any() else torch.tensor(float("nan"))))
+                pr_stats.append((tau_i.float().mean(), tau_p.float().mean(), (stop > 0).float().mean(),
+                                 (stop[need[i]] > 0).float().mean() if need[i].any() else torch.tensor(float("nan")),
+                                 rel.mean(), rel[need[i]].mean() if need[i].any() else torch.tensor(float("nan"))))
                 tau_i = tau_p
             else:
                 lab = make_labels(ro, best_roll[i, gc[i]], tau_i, cfg)
             meta = torch.stack([tau_i, need[i].long(), torch.zeros_like(tau_i)], 1)
-            buf.add(s[i], r[i], g[i], lab, ~greedy_succ[i], meta)
+            buf.add(s[i], r[i], g[i], lab, ~greedy_succ[i], meta, wts)
         # (b) hindsight: cells the seeker reached alive are rewarded targets for the same joint actions
         n_h = 0
         if args.hind > 0:
@@ -330,14 +374,15 @@ def main():
             ti, ci, hg = ti[okh], ci[okh], hg[okh]
             if len(ti):
                 tau_h = best_time[ti, ci]
+                wts_h = None
                 if args.prune:
-                    lab, tau_h, stop_h = prune_batch(ro, best_roll[ti, ci], tau_h, ci, cfg)
+                    lab, wts_h, tau_h, stop_h, rel_h = prune_batch(ro, best_roll[ti, ci], tau_h, ci, cfg, args.null_k, rng, args.post_w)
                     assert bool(verify_labels(s[ti], r[ti], hg, lab, tau_h, cfg).all())
                 else:
                     lab = make_labels(ro, best_roll[ti, ci], tau_h, cfg)
                 h_need = manhattan(s[ti], hg) > cfg.B
                 meta = torch.stack([tau_h, h_need.long(), torch.ones_like(tau_h)], 1)
-                buf.add(s[ti], r[ti], hg, lab, torch.zeros(len(ti), dtype=torch.bool), meta)
+                buf.add(s[ti], r[ti], hg, lab, torch.zeros(len(ti), dtype=torch.bool), meta, wts_h)
                 n_h = len(ti)
         t_search = time.time() - t_r0
 
@@ -354,21 +399,22 @@ def main():
         )
         if pr_stats:
             stats.update(tau_raw=float(pr_stats[0][0]), tau_pruned=float(pr_stats[0][1]),
-                         rech_moves=float(pr_stats[0][2]), rech_moves_need=float(pr_stats[0][3]))
+                         rech_moves=float(pr_stats[0][2]), rech_moves_need=float(pr_stats[0][3]),
+                         rel=float(pr_stats[0][4]), rel_need=float(pr_stats[0][5]))
 
         # ---------------- learn ------------------
         losses = []
         if buf.n >= args.bs:
             for _ in range(args.G):
-                bs_, br_, bg_, blab = buf.sample(args.bs, gen, args.hard_frac if args.hard_frac >= 0 else None)
+                bs_, br_, bg_, blab, bw = buf.sample(args.bs, gen, args.hard_frac if args.hard_frac >= 0 else None)
                 cond = make_cond(bs_, br_, bg_, cfg)
                 K = args.K + int(torch.randint(-args.K_jitter, args.K_jitter + 1, (1,), generator=gen))
                 taps = (K - args.taps,) if args.taps > 0 else ()
                 with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(args.amp)):
                     res = model(cond, K, taps=taps)
-                loss = tube_loss(res[0], blab, cfg)
+                loss = tube_loss(res[0], blab, cfg, bw)
                 for tl in (res[2] if taps else ()):
-                    loss = loss + 0.3 * tube_loss(tl, blab, cfg)
+                    loss = loss + 0.3 * tube_loss(tl, blab, cfg, bw)
                 opt.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)

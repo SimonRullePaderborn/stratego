@@ -93,24 +93,85 @@ def prune(ps, pr, g, B, T):
     return ps, pr, ts
 
 
-def prune_batch(ro, roll, tau, gcell, cfg):
-    """Prune selected rollouts.  Returns labels [k, 2, T+1], new tau [k], recharger stop time [k]."""
+_NB = {}
+
+
+def _neighbours(cfg):
+    """cell -> the 5 cells reached by the 5 actions (same table the simulator implies)."""
+    key = (cfg.H, cfg.W)
+    if key not in _NB:
+        tab = []
+        for c in range(cfg.H * cfg.W):
+            x, y = divmod(c, cfg.W)
+            row = []
+            for dx, dy in MOVES.tolist():
+                nx, ny = min(max(x + dx, 0), cfg.H - 1), min(max(y + dy, 0), cfg.W - 1)
+                row.append(nx * cfg.W + ny)
+            tab.append(row)
+        _NB[key] = tab
+    return _NB[key]
+
+
+def partner_relevance(ps, g, r0, cfg, K, rng):
+    """Does the reward depend on what the recharger does?
+
+    Replay the seeker's path against K 'null partners' (rechargers doing a
+    uniformly random walk from the same start).  Returns the fraction of null
+    partners with which the seeker is NOT rewarded on time: 0.0 means the
+    recharger was irrelevant to this reward, ~1.0 means the reward needed it."""
+    nb = _neighbours(cfg)
+    tau = len(ps) - 1
+    miss = 0
+    for _ in range(K):
+        pr, c = [r0], r0
+        for _ in range(tau):
+            c = nb[c][rng.randrange(5)]
+            pr.append(c)
+        if arrival_time(ps, pr, g, cfg.B, cfg.T) != tau:
+            miss += 1
+    return miss / K
+
+
+def prune_batch(ro, roll, tau, gcell, cfg, null_k=0, rng=None, post_w=0.0):
+    """Prune selected rollouts and work out which parts of them carry credit.
+
+    Returns labels [k, 2, T+1], per-slice loss weights [k, 2, T+1], new tau [k],
+    recharger stop time [k], recharger relevance [k].
+
+    With null_k == 0 every slice has weight 1 (plain imitation of the pruned rollout).
+    With null_k  > 0:
+      * seeker slices 1..tau carry weight 1 (its path earned the reward),
+      * recharger slices 1..t_last carry weight = partner relevance, where t_last is
+        the last time its presence could matter (its last move or its last contact),
+      * everything after the reward carries weight post_w (default 0: the episode is over).
+    """
     W = cfg.W
     cs = (ro["traj_s"][roll][..., 0] * W + ro["traj_s"][roll][..., 1]).tolist()
     cr = (ro["traj_r"][roll][..., 0] * W + ro["traj_r"][roll][..., 1]).tolist()
     taus = tau.tolist()
     gs = gcell.tolist()
-    lab = torch.zeros(len(roll), 2, cfg.T + 1, dtype=torch.long)
-    new_tau = torch.zeros(len(roll), dtype=torch.long)
-    stop = torch.zeros(len(roll), dtype=torch.long)
-    for i in range(len(roll)):
+    k = len(roll)
+    lab = torch.zeros(k, 2, cfg.T + 1, dtype=torch.long)
+    wts = torch.ones(k, 2, cfg.T + 1)
+    new_tau = torch.zeros(k, dtype=torch.long)
+    stop = torch.zeros(k, dtype=torch.long)
+    rel = torch.ones(k)
+    for i in range(k):
         ps, pr, ts = prune(cs[i][: taus[i] + 1], cr[i][: taus[i] + 1], gs[i], cfg.B, cfg.T)
         L = len(ps) - 1
         lab[i, 0] = torch.tensor(ps + [ps[-1]] * (cfg.T - L))
         lab[i, 1] = torch.tensor(pr + [pr[-1]] * (cfg.T - L))
         new_tau[i] = L
         stop[i] = ts
-    return lab, new_tau, stop
+        if null_k > 0:
+            w_r = partner_relevance(ps, gs[i], pr[0], cfg, null_k, rng)
+            meets = [t for t in range(1, L + 1) if ps[t] == pr[t]]
+            t_last = max(ts, meets[-1] if meets else 0)
+            rel[i] = w_r
+            wts[i, :, L + 1:] = post_w
+            wts[i, 1, 1: L + 1] = 0.0
+            wts[i, 1, 1: t_last + 1] = w_r
+    return lab, wts, new_tau, stop, rel
 
 
 def labels_to_actions(lab, cfg):
