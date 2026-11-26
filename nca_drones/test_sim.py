@@ -155,3 +155,26 @@ def test_crossplay():
 
 if __name__ == "__main__":
     test_crossplay()
+
+
+def test_null_partner_credit():
+    """Credit is 0 for a recharger that was never needed and ~1 where the reward needed it."""
+    from credit import null_partner_credit
+    cfg = Cfg()
+    gen = torch.Generator().manual_seed(11)
+    # seeker walks 3 steps east to the target: recharger irrelevant
+    s = torch.tensor([[0, 0], [0, 0]]); r = torch.tensor([[7, 7], [0, 3]]); g = torch.tensor([[0, 3], [0, 7]])
+    acts = torch.zeros(2, cfg.T, 2, dtype=torch.long)
+    acts[0, :3, 0] = 4                       # task 0: east x3, recharger idle
+    acts[1, :7, 0] = 4                       # task 1: east x7 through the recharger waiting at (0,3)
+    succ, tau = replay(s, r, g, acts, cfg)
+    assert bool(succ.all()) and tau.tolist() == [3, 7]
+    w_s, w_r = null_partner_credit(s, r, g, acts, cfg, 2000, gen)
+    assert float(w_r[0]) == 0.0, "recharger gets no credit when the seeker did it alone"
+    assert 0.45 < float(w_r[1]) < 0.7, "recharger on the seeker's path: a random partner rescues it about 45% of the time"
+    assert float(w_s[1]) == 1.0, "a random seeker cannot reach a far target"
+    print(f"null-partner credit: easy task recharger {float(w_r[0]):.2f}, needed-recharge task recharger {float(w_r[1]):.2f}, seekers {w_s.tolist()}")
+
+
+if __name__ == "__main__":
+    test_null_partner_credit()

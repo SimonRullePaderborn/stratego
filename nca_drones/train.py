@@ -1,20 +1,25 @@
 """Reward-only training of the space-time NCA.
 
-One "round":
+One "round" (the audited path, --strict 1):
   1. sample tasks uniformly (no curriculum, no distance features),
-  2. GROW the space-time volume with the current NCA,
+  2. GROW the space-time volume with the current NCA from the t=0 observation,
   3. SEARCH: follow the two grown tubes stochastically in the simulator
-     (M joint rollouts per task),
-  4. collect reward:
-       - for the posed target (sparse 0/1),
-       - in HINDSIGHT for every cell the seeker actually arrived at while its
-         battery was still alive: replaying the same joint actions against that
-         cell as target is, by the simulator's own rule, a rewarded episode,
-  5. LEARN: train the NCA to grow the tubes of rewarded joint rollouts.
+     (M joint rollouts per task against the posed target),
+  4. REWARD: the simulator's 0/1 reward says which rollouts worked; per task the
+     earliest rewarded rollout is kept (ties: the one the tissue finds most likely),
+  5. CREDIT: counterfactual replays in the simulator (credit.py) say how much the
+     reward depended on each drone's own behaviour,
+  6. LEARN: train the NCA to grow the tubes of rewarded joint rollouts.
 
 The only teacher is the simulator's 0/1 reward.  No solver, no dynamic
 programming, no distance feature, no shaped reward.  The battery level is
-never observed; the learner only ever sees which rollouts were rewarded.
+never observed.
+
+Older experimental paths are kept for the record and are OFF in the audited
+configuration: hindsight relabelling (--hind), label pruning (--prune 1,
+prune.py), cross-play (--cross).  Manhattan distance and B appear in this file
+only to label log lines (`need`) and never reach selection, weights, replay
+priorities or the network.
 """
 import argparse
 import json
@@ -27,6 +32,7 @@ import torch.nn.functional as F
 
 from env import Cfg, DroneEnv, manhattan, sample_tasks
 from nca import SpaceTimeNCA, make_cond
+from credit import null_partner_credit
 from prune import credit_batch, prune_batch, verify_labels
 
 BIG = 10_000
@@ -344,6 +350,8 @@ def main():
     ap.add_argument("--taps", type=int, default=0, help="deep supervision: also apply the loss this many iterations before the end")
     ap.add_argument("--prune", type=int, default=0, help="1: simulator-verified pruning of rewarded rollouts; 2: no label editing, credit weights only")
     ap.add_argument("--threads", type=int, default=0)
+    ap.add_argument("--strict", type=int, default=0, help="audited path: search against the posed target only, reward straight from the simulator's step, "
+                    "credit by null-partner replays in the real simulator (no hindsight, no label editing, no learner-side copy of the battery rule)")
     ap.add_argument("--cross", type=int, default=0, help="cross-play search: judge all (seeker worldline, recharger worldline) pairs of a task in the simulator")
     ap.add_argument("--ema", type=float, default=0.0, help="decay of the weight average used for search and evaluation (0 = use the raw weights)")
     ap.add_argument("--prefix", type=float, default=0.0, help="share of training samples seeded with a random-length realised past (the tissue regrows the future)")
@@ -383,6 +391,9 @@ def main():
     ema_model = copy.deepcopy(model) if args.ema > 0 else model
     if args.resume and args.ema > 0 and "ema" in ck:
         ema_model.load_state_dict(ck["ema"])
+    posed = torch.zeros((cfg.H * cfg.W) ** 3, dtype=torch.bool)      # every task ever posed to the learner (for strictly disjoint evaluation)
+    if args.resume and "posed" in ck:
+        posed = ck["posed"]
     buf = Buffer(args.buf, cfg)
     print(f"params: {sum(p.numel() for p in model.parameters())}", flush=True)
 
@@ -413,15 +424,43 @@ def main():
         s, r, g = sample_tasks(N * 2, cfg, gen, "all")
         keep = ~torch.isin(task_key(s, r, g, cfg), held)
         s, r, g = s[keep][:N], r[keep][:N], g[keep][:N]
-        need = manhattan(s, g) > cfg.B
+        need = manhattan(s, g) > cfg.B                      # for logs only
+        posed[task_key(s, r, g, cfg)] = True
         with torch.no_grad():
             logits = grow(ema_model, s, r, g, cfg, args.K, args.amp)
-            ro = rollout(logits, s, r, None, cfg, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen, ez=args.ez, shared=shared_v,
-                         kinematic=bool(args.cross))
+            ro = rollout(logits, s, r, g if args.strict else None, cfg, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen, ez=args.ez,
+                         shared=shared_v, kinematic=bool(args.cross))
         gc = cell_of(g, cfg)
         pr_stats = []
         xstats = {}
-        if args.cross:
+        if args.strict:
+            # the simulator ran every rollout against the posed target; its reward is all we use
+            succ = ro["success"].reshape(N, M)
+            tau_m = ro["tau"].reshape(N, M)
+            score = torch.where(succ, -tau_m.float() * 1000.0 + ro["logp"].reshape(N, M).clamp(min=-900.0), torch.full((N, M), -1e9))
+            best = score.argmax(1)                              # earliest reward; ties: most likely under the tissue
+            any_succ = succ.any(1)
+            greedy_succ = succ[:, 0]                            # rollout 0 is the greedy readout
+            if any_succ.any():
+                i = torch.nonzero(any_succ).squeeze(1)
+                sel = i * M + best[i]
+                tau_i = ro["tau"][sel]
+                lab = torch.stack([ro["traj_s"][sel][..., 0] * cfg.W + ro["traj_s"][sel][..., 1],
+                                   ro["traj_r"][sel][..., 0] * cfg.W + ro["traj_r"][sel][..., 1]], 1)      # the rollout exactly as it happened
+                if args.null_k > 0:
+                    w_s, w_r = null_partner_credit(s[i], r[i], g[i], ro["acts"][sel], cfg, args.null_k, gen)
+                else:
+                    w_s = w_r = torch.ones(len(i))
+                ts = torch.arange(cfg.T + 1)[None]
+                live = ((ts >= 1) & (ts <= tau_i[:, None])).float()                                        # slices up to the reward
+                wts = torch.stack([live * w_s[:, None], live * w_r[:, None]], 1) + args.post_w * (ts > tau_i[:, None]).float()[:, None]
+                pr_stats.append((tau_i.float().mean(), tau_i.float().mean(), w_s.mean(),
+                                 w_s[need[i]].mean() if need[i].any() else torch.tensor(float("nan")),
+                                 w_r.mean(), w_r[need[i]].mean() if need[i].any() else torch.tensor(float("nan"))))
+                meta = torch.stack([tau_i, need[i].long(), torch.zeros_like(tau_i)], 1)
+                buf.add(s[i], r[i], g[i], lab, ~greedy_succ[i], meta, wts)
+            best_time = fv = None
+        elif args.cross:
             # every sampled seeker worldline against every sampled recharger worldline, judged by the simulator
             cs = (ro["traj_s"][..., 0] * cfg.W + ro["traj_s"][..., 1]).reshape(N, M, cfg.T + 1)
             cr = (ro["traj_r"][..., 0] * cfg.W + ro["traj_r"][..., 1]).reshape(N, M, cfg.T + 1)
@@ -457,7 +496,7 @@ def main():
             any_succ = best_time[arN, gc] < BIG
             greedy_succ = fv[arN * M, gc] < BIG             # rollout 0 of each task is the greedy readout
         # (a) the posed task
-        if not args.cross and any_succ.any():
+        if not args.cross and not args.strict and any_succ.any():
             i = torch.nonzero(any_succ).squeeze(1)
             tau_i = best_time[i, gc[i]]
             wts = None
@@ -474,7 +513,7 @@ def main():
             buf.add(s[i], r[i], g[i], lab, ~greedy_succ[i], meta, wts)
         # (b) hindsight: cells the seeker reached alive are rewarded targets for the same joint actions
         n_h = 0
-        if args.hind > 0 and not args.cross:
+        if args.hind > 0 and not args.cross and not args.strict:
             reach = best_time < BIG
             reach[arN, gc] = False
             reach[arN, cell_of(s, cfg)] = False
@@ -575,14 +614,15 @@ def main():
                   f"buf={buf.n} need={stats['buf_need']:.2f} hard={stats['buf_hard']:.2f} tau={stats['buf_tau']:.1f} alive={stats['alive_T']:.1f}",
                   flush=True)
             torch.save(dict(model=ema_model.state_dict(), raw=model.state_dict(), ema=ema_model.state_dict(), opt=opt.state_dict(),
-                            round=rnd + 1, args=vars(args)), os.path.join(out_dir, "ckpt.pt"))
+                            round=rnd + 1, args=vars(args), posed=posed), os.path.join(out_dir, "ckpt.pt"))
             score = stats.get("val_need_closed", stats["val_need"])
             if score >= ema.get("best_val", -1):
                 ema["best_val"] = score
                 torch.save(dict(model=ema_model.state_dict(), round=rnd + 1, args=vars(args), val_need=stats["val_need"],
-                                val_need_closed=stats.get("val_need_closed")), os.path.join(out_dir, "best.pt"))
+                                val_need_closed=stats.get("val_need_closed"), posed=posed.clone()), os.path.join(out_dir, "best.pt"))
             if rnd % 100 == 0:
-                torch.save(dict(model=ema_model.state_dict(), round=rnd + 1, args=vars(args)), os.path.join(out_dir, f"ckpt_{rnd:05d}.pt"))
+                torch.save(dict(model=ema_model.state_dict(), round=rnd + 1, args=vars(args), posed=posed.clone()),
+                           os.path.join(out_dir, f"ckpt_{rnd:05d}.pt"))
         logf.write(json.dumps(stats) + "\n")
         logf.flush()
 

@@ -11,8 +11,12 @@ World
 * Reward is sparse: 1 when the seeker stands on the target, else 0.
   The episode ends on success, on an empty battery, or at t == T.
 
-Nothing in this file is given to the learner except through `step` (the
-simulator) and the reward it returns.  The battery level is never observed.
+What the learner takes from this file: `step` (positions after the move, the
+0/1 reward, and whether the episode is over), `cand` (which cell each of the
+5 actions leads to) and `replay`.  The battery level is never observed.
+The task sampler uses Manhattan distance and B to guarantee feasible tasks and
+to define the "recharge-needed" evaluation set; that is part of the
+environment, not of the learner.
 """
 from dataclasses import dataclass
 
