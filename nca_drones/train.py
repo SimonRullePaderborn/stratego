@@ -322,6 +322,27 @@ def tube_loss(logits, labels, cfg, w=None):
     return (ce * w).sum() / w.sum().clamp(min=1.0)
 
 
+@torch.no_grad()
+def loss_parts(logits, labels, cfg, w, tp):
+    """For the log only (nothing here reaches the weights): the tube loss of a batch, split.
+
+    `loss_fresh` and `loss_past` are the credit-weighted cross-entropy of the samples without a realised past
+    (tp == 0) and with one; `next_fresh` and `next_past` are the same over one slice alone, tp + 1, which is the
+    slice a drone reads for its next move in closed loop.  A part with no credited slice is NaN."""
+    n = logits.shape[0]
+    lg = logits.float().reshape(n, 2, cfg.T + 1, cfg.H * cfg.W)[:, :, 1:]
+    ce = F.cross_entropy(lg.reshape(-1, cfg.H * cfg.W), labels[:, :, 1:].reshape(-1), reduction="none").reshape(n, 2, cfg.T)
+    w = w[:, :, 1:]
+    tp = tp.to(w.device)
+    nxt = (torch.arange(1, cfg.T + 1, device=w.device)[None] == (tp + 1)[:, None]).float()[:, None]      # [n, 1, T]
+    out = {}
+    for name, m in (("fresh", tp == 0), ("past", tp > 0)):
+        for key, ww in (("loss_", w), ("next_", w * nxt)):
+            tot = float(ww[m].sum())
+            out[key + name] = float((ce[m] * ww[m]).sum()) / tot if tot > 0 else float("nan")
+    return out
+
+
 # --------------------------------------------------------------------------
 # helpers
 # --------------------------------------------------------------------------
@@ -760,7 +781,7 @@ def main():
                          rel=float(pr_stats[0][4]), rel_need=float(pr_stats[0][5]))
 
         # ---------------- learn ------------------
-        losses = []
+        losses, gnorms, parts = [], [], {}
         if buf.n >= args.bs:
             for _ in range(args.G):
                 bs_, br_, bg_, blab, bw, bbat = buf.sample(args.bs, gen, args.hard_frac if args.hard_frac >= 0 else None)
@@ -786,19 +807,23 @@ def main():
                     # the state is rebuilt as closed loop builds it: K iterations on the first observation, then a few
                     # after each step of the realised past; the number per step is redrawn for every batch
                     ks_b = args.ks + (int(torch.randint(-args.ks_jitter, args.ks_jitter + 1, (1,), generator=gen)) if args.ks_jitter > 0 else 0)
-                    lg_k = replay_kept(model, bs_, br_, bg_, cfg, blab, bbat, tp, codes_b, K, max(ks_b, 1), args.grad_its, args.amp)
-                    loss = tube_loss(own(lg_k), lab_d, cfg, w_d)
+                    lg_o = own(replay_kept(model, bs_, br_, bg_, cfg, blab, bbat, tp, codes_b, K, max(ks_b, 1), args.grad_its, args.amp))
+                    loss = tube_loss(lg_o, lab_d, cfg, w_d)
                 else:
                     with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(args.amp)):
                         res = model(cond, K, taps=taps)
-                    loss = tube_loss(own(res[0]), lab_d, cfg, w_d)
+                    lg_o = own(res[0])
+                    loss = tube_loss(lg_o, lab_d, cfg, w_d)
                     for tl in (res[2] if taps else ()):
                         loss = loss + 0.3 * tube_loss(own(tl), lab_d, cfg, w_d)
                 if not bool(torch.isfinite(loss)):
                     raise SystemExit(f"round {rnd}: the loss is {loss.item()}; the run stops instead of training on it")
+                for k_, v_ in loss_parts(lg_o, lab_d, cfg, w_d, tp).items():        # for the log only
+                    if v_ == v_:
+                        parts.setdefault(k_, []).append(v_)
                 opt.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                gnorms.append(float(torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)))   # the norm before clipping
                 opt.step()
                 if args.ema > 0:
                     with torch.no_grad():
@@ -806,6 +831,11 @@ def main():
                             pe.mul_(args.ema).add_(p, alpha=1 - args.ema)
                 losses.append(loss.item())
         stats["loss"] = sum(losses) / len(losses) if losses else float("nan")
+        # logged since the look at step 8 (card 2026-11-27-p2-s8-kept-dials): the gradient's norm before clipping, and
+        # the loss of the samples without and with a realised past, over all credited slices and over the next one
+        stats["gnorm"] = sum(gnorms) / len(gnorms) if gnorms else float("nan")
+        for k_ in ("loss_fresh", "loss_past", "next_fresh", "next_past"):
+            stats[k_] = sum(parts[k_]) / len(parts[k_]) if parts.get(k_) else float("nan")
         stats["time"] = time.time() - t0
         for k in ("search_easy", "search_need", "greedy_easy", "greedy_need", "loss"):
             v = stats[k]

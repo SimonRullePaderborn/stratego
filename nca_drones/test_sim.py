@@ -383,3 +383,36 @@ def test_kept_state():
 
 if __name__ == "__main__":
     test_kept_state()
+
+
+def test_loss_parts():
+    """The split of the loss that the trainer logs: the two parts add up to the loss, and the next-slice part is
+    the cross-entropy of slice tp + 1 alone."""
+    import torch.nn.functional as F
+    from train import loss_parts, tube_loss
+    cfg = Cfg()
+    gen = torch.Generator().manual_seed(5)
+    n, hw = 6, cfg.H * cfg.W
+    logits = torch.randn(n, 2, cfg.T + 1, cfg.H, cfg.W, generator=gen)
+    labels = torch.randint(0, hw, (n, 2, cfg.T + 1), generator=gen)
+    tp = torch.tensor([0, 0, 3, 1, 0, 7])
+    w = torch.rand(n, 2, cfg.T + 1, generator=gen) * (torch.arange(cfg.T + 1)[None, None] > tp[:, None, None]).float()
+    p = loss_parts(logits, labels, cfg, w, tp)
+    wf, wp = float(w[tp == 0][:, :, 1:].sum()), float(w[tp > 0][:, :, 1:].sum())
+    whole = float(tube_loss(logits, labels, cfg, w))
+    assert abs((p["loss_fresh"] * wf + p["loss_past"] * wp) / (wf + wp) - whole) < 1e-5, "the two parts add up to the loss"
+    num = den = 0.0                                       # by hand: the next slice of the three samples with a past
+    for b in (2, 3, 5):
+        t = int(tp[b]) + 1
+        for d in (0, 1):
+            ce = F.cross_entropy(logits[b, d, t].reshape(1, hw), labels[b, d, t].reshape(1))
+            num, den = num + float(ce) * float(w[b, d, t]), den + float(w[b, d, t])
+    assert abs(p["next_past"] - num / den) < 1e-5, "the next-slice part is the cross-entropy of slice tp + 1"
+    none = loss_parts(logits, labels, cfg, w, torch.zeros(n, dtype=torch.long))
+    assert none["loss_past"] != none["loss_past"], "a part without samples is NaN"
+    print(f"loss parts: fresh {p['loss_fresh']:.3f} and past {p['loss_past']:.3f} add up to the loss {whole:.3f}; "
+          f"the next-slice part is that of slice tp + 1")
+
+
+if __name__ == "__main__":
+    test_loss_parts()
