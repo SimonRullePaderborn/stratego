@@ -5,6 +5,7 @@
 #
 # Run it on the cluster (login node, and once inside a GPU allocation if GPUs are not visible on the login node).
 # Never run it on the laptop: the laptop only issues ssh and git commands.
+# It runs no git and contacts no GitHub address: all code and all git go through the Mac (PROGRAMME.md, 4.3).
 set -u
 
 sec() { printf '\n== %s ==\n' "$1"; }
@@ -64,19 +65,12 @@ for v in SCRATCH WORK TMPDIR; do
 done
 
 sec "network (HTTP status; 000 means unreachable)"
-for u in https://github.com https://pypi.org https://download.pytorch.org; do
+for u in https://pypi.org https://download.pytorch.org; do
     printf '%-34s ' "$u"
     curl -sS -m 8 -o /dev/null -w '%{http_code}\n' "$u" 2>&1 | tail -1
 done
 
-sec "repository"
-here="$(cd "$(dirname "$0")/.." && pwd)"
+sec "code (sent from the Mac; the commit is in COMMIT next to nca_drones/)"
+here="$(cd "$(dirname "$0")/../.." && pwd)"
 echo "$here"
-git --version
-git -C "$here" rev-parse --abbrev-ref HEAD 2>/dev/null
-git -C "$here" rev-parse --short HEAD 2>/dev/null
-
-sec "git remote access (a read, then a dry-run push that sends nothing)"
-export GIT_TERMINAL_PROMPT=0
-git -C "$here" ls-remote --heads origin 2>&1 | head -3
-git -C "$here" push --dry-run origin HEAD 2>&1 | tail -2
+cat "$here/COMMIT" 2>/dev/null || echo "no COMMIT file in $here"

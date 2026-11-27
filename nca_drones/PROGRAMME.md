@@ -57,7 +57,7 @@ section 18.
 | Side conversation about the 8x8 result | https://claude.ai/code/session_01K5Zd8SsCGMPuWWnYveByQA (works on commit `12ae323`, the last one before any wavefront design) |
 | Kickoff session, in which design version 2 and this file were written | https://claude.ai/code/session_01K5Zd8UZXC6gYHJGArqK5aM |
 
-To get the code:
+To get the code, on the Mac (the cluster never clones; it receives files from the Mac, section 9.2):
 
 ```
 git clone --branch claude/nca-drone-coordination-d2k5kw https://github.com/SimonRullePaderborn/stratego.git
@@ -107,10 +107,10 @@ from the second review; the commit after it holds this plan.
 | Exploration noise | `wf/explore.py` | Written, never executed |
 | Tests of the three files above | `wf/test_sim.py`, 17 tests | Never executed. Every expected value was worked out by hand from the rules. The tests added in the last review round were read once, not twice |
 | First measurement | `wf/yield_table.py` | Written, never executed |
-| Cluster kit | `cluster/probe.sh`, `cluster/bench_rule.py` | Written, never executed |
+| Cluster kit | `cluster/probe.sh`, `cluster/bench_rule.py`, `cluster/check_manifest.py` | The probe ran once on 27 November (phase 0, step 3); the other two are written and not yet executed |
 | Experiment cards | `experiments/` | Two cards are filled in up to "before the run" |
 | The rest of the new system: lattice, search, credit, learner, evaluator, benchmark-side tools | none yet | Not written. Specified in sections 11 and 12 |
-| The cluster | none | Not connected. Scheduler, number of GPUs, paths and network access are unknown |
+| The cluster | none | Connected on 27 November: one DGX node with 8 H100, no scheduler, jobs as Docker containers; the facts are in the phase 0 card. Phase 0 is in progress |
 
 Code that has never run will contain errors that reading did not find. The first run of each file is therefore
 a test of the file, and section 11.1 says what to do when a test fails.
@@ -177,7 +177,11 @@ afresh, replaying a leg with some drones acting at random, and running a leg wit
 
 * Work only in `nca_drones/`, only on the branch `claude/nca-drone-coordination-d2k5kw`. No pull request unless
   the PI asks for one.
-* Code moves by git only. A run uses a committed state, and its card names the commit.
+* All code and all git go through the Mac (the PI's rule of 27 November). Git runs on the Mac and nowhere
+  else, between the Mac and GitHub. The cluster receives the files of a commit from the Mac over ssh (section
+  9.2); it runs no git command and never contacts GitHub. A run uses a committed state, and its card names the
+  commit. (The clone `~/wf/stratego`, made on the cluster on 27 November before this rule was given, is kept by
+  the PI's decision and is not used.)
 * The repository's ignore lists hide `runs/`, any `run.sh`, and every file or folder whose name starts with
   `data`, `local`, `checkpoints` or `exps`. Files that must be committed get other names.
 * No personal data in file names, job names, logs that are committed, or requests to outside services. Raw
@@ -328,7 +332,7 @@ ends, the evaluation-set generator with its certificates, the other map families
 | Capture | Exact: a capturer lands on the target's cell or crosses it. The capture radius stays a setting at zero |
 | Information | One shared lattice, so communication is free and instant; the map is known in advance; the target is known only inside a sensor footprint |
 | Empty battery | A drone with an empty battery cannot fly, and flies again once a recharger on its cell has refilled it |
-| Cluster access | The project lives in git on the Mac; the cluster is reached over ssh from there |
+| Cluster access | The project lives in git on the Mac; the cluster is reached over ssh from there. All code and all git go through the Mac: the cluster runs no git and never contacts GitHub, it receives the files of a commit from the Mac, and results come back to the Mac, where they are committed and pushed to GitHub (27 November) |
 | Search and training | Accepted as proposed: search from saved simulator states (cuts, trunks that continue from kept clones, replays with a drone acting at random or with its sensing withheld); exploration noise held over several steps; legs scored by 0.97 to the power of steps to capture; a training mixture of grid sides 12, 16, 24 and team sizes |
 | Battery input | Each drone's battery level is an input to the learner. This is the sole exception to the contract |
 
@@ -340,7 +344,7 @@ proposals" accepts all of them.
 
 | No. | Decision | Proposal and reason | Needed before |
 |---|---|---|---|
-| O1 | Cluster facts: ssh alias, scheduler, number of H100s and for how long, working directory, whether the cluster reaches GitHub and PyPI and may push | `cluster/probe.sh` answers most of it in one run | Phase 0 |
+| O1 | Cluster facts: ssh alias, scheduler, number of H100s and for how long, working directory, whether the cluster reaches PyPI | `cluster/probe.sh` answers most of it in one run | Phase 0 |
 | O2 | Tools on the benchmark side, never imported by the learner | Allowed: shortest-path detour measure; a scripted team that always sees the target, for admitting instances and as a reference; a second one that acts on what was sensed, for calibrating radii; enumeration of small games; a readout of the target's cell fitted afterwards on saved states. Also allowed, in the map generator: a connectivity check on every generated map, training maps included | Phase 1, step 5 |
 | O3 | What a drone with an empty battery can still do | It cannot sense or capture, and the target ignores it. An empty capturer that could still capture would void the recharge certificate | Phase 1, step 5 |
 | O4 | Flee and wander rule, sight, metric | As in section 5.2: one step ahead, greatest distance to the nearest drone seen, staying allowed, two cells of sight through obstacles, Manhattan distances. Blocked sight would let one capturer ambush and would void the coordination proof | Phase 1, step 5 |
@@ -561,13 +565,10 @@ section 16. The measured time per round then decides how many rounds the run can
    `h100` and the directory `~/wf` on the cluster in all commands; replace both if you choose other names.
 3. **The cluster facts**, as far as you know them: the scheduler (Slurm or another), the names of the GPU and
    CPU partitions and of the account if one is needed, how many H100s you may use and for how long, a
-   directory with at least 50 GB of space, whether the cluster reaches github.com and pypi.org, and any site
-   rule such as "no computing on login nodes". What you do not know, `cluster/probe.sh` finds out.
-4. **How the cluster gets the code** (section 9.2). If the cluster reaches GitHub and the repository is
-   public, nothing is needed. If the repository is private, either give the cluster a deploy key (an ssh key;
-   the clone then uses the address `git@github.com:SimonRullePaderborn/stratego.git`, and pushing results from
-   the cluster needs a key with write access), or use the second route of 9.2, which needs no GitHub access
-   from the cluster at all.
+   directory with at least 50 GB of space, whether the cluster reaches pypi.org, and any site rule such as
+   "no computing on login nodes". What you do not know, `cluster/probe.sh` finds out.
+4. **How the cluster gets the code** (section 9.2): the Mac sends it over ssh. The cluster needs no GitHub
+   access, no key and no git identity.
 5. **The open decisions** O2 to O7 of section 6.2, which phase 1 needs. "Use the proposals" is a valid answer.
 6. Optionally the safeguard of section 8.3.
 7. Start the session (8.2) and paste the message (8.4).
@@ -628,14 +629,15 @@ which hold the text of the design.
 
 Hard rule, no exceptions: no project code runs on this Mac. No Python, no tests, no benchmarks, no figure
 scripts, no package installs. On this Mac you may only use git and ssh. Everything is executed on the H100
-cluster, with commands of the form  ssh <alias> '...'.  Confirm this rule in your first reply, before you
-propose or run anything.
+cluster, with commands of the form  ssh <alias> '...'.  All code and all git go through this Mac: the cluster
+runs no git command and never contacts GitHub. Confirm these rules in your first reply, before you propose or
+run anything.
 
 Work only in nca_drones/, on the branch claude/nca-drone-coordination-d2k5kw. Do not open a pull request.
 
 The cluster: ssh alias <alias>. Scheduler: <Slurm / other / unknown>. GPU partition: <name>. CPU partition:
 <name>. Account: <name or none>. H100s available: <number, for how long>. Working directory: <path>.
-The cluster reaches GitHub: <yes / no / unknown>. The cluster reaches PyPI: <yes / no / unknown>.
+The cluster reaches PyPI: <yes / no / unknown>.
 
 My decisions on the open points of section 6.2: <"use the proposals", or a list such as O2 yes, O4 ...>.
 
@@ -650,41 +652,38 @@ learner to get past it. Ask me before anything that section 6.2 lists as open.
 
 ```
 ~/wf/
-    stratego/        the main clone, on the branch; used for tests, checks and small runs
-    stratego.git/    only with the second route of 9.2: the bare repository the Mac pushes to
     venv/            the Python environment
-    runs/<card>/     one git worktree per experiment, at the exact commit named in its card
-    logs/            scheduler output; jobs are submitted from here
+    runs/<card>/     per experiment: the files of the commit named in its card, sent from the Mac (9.2), with
+                     COMMIT (that commit) and MANIFEST (its list of files); the run writes its output here too
+    logs/            job output; jobs are started from here
+    stratego/        a git clone made on the cluster on 27 November, before the rule of section 4.3; kept by the
+                     PI's decision and not used
 ```
 
-A worktree for an experiment: `git -C ~/wf/stratego worktree add --detach ~/wf/runs/<card> <commit>`. A run
-can then always be traced to its source, and later commits do not change a job that is waiting or running.
+A run folder is filled once from the Mac and afterwards changed only by what the run writes, so a run can
+always be traced to its source, and later commits do not change a job that is waiting or running.
 
 ### 9.2 Moving code
 
-Code moves by git only. There are two routes.
-
-**The cluster reaches GitHub.** The cluster clones from GitHub and pulls. Results that should be kept are
-committed on the cluster and pushed, which needs push rights there (`cluster/probe.sh` tests this with a dry
-run that sends nothing). Before pushing results, the cluster runs `git pull --rebase`, because the Mac may
-have pushed code in the meantime; result files and code files do not overlap.
-
-**The cluster does not reach GitHub, or should hold no GitHub key.** The Mac pushes to a bare repository on
-the cluster over ssh, and fetches results from it:
+All code and all git go through the Mac (section 4.3). Git runs on the Mac only, against GitHub. The cluster
+gets the files of one commit, in a run folder of its own, by these commands, issued from the repository root
+on the Mac:
 
 ```
-ssh h100 'mkdir -p ~/wf/logs && git init --bare ~/wf/stratego.git'
-git remote add cluster h100:wf/stratego.git
-git push cluster claude/nca-drone-coordination-d2k5kw
-ssh h100 'cd ~/wf && git clone --branch claude/nca-drone-coordination-d2k5kw stratego.git stratego'
+c=$(git rev-parse --short=12 HEAD)                  # or the commit that the card names
+git archive $c nca_drones | ssh h100 "mkdir -p ~/wf/runs/<card> ~/wf/logs && tar -x -f - -C ~/wf/runs/<card> && echo $c > ~/wf/runs/<card>/COMMIT"
+git ls-tree -r -z $c nca_drones | ssh h100 "cat > ~/wf/runs/<card>/MANIFEST"
+ssh h100 'python3 -I ~/wf/runs/<card>/nca_drones/cluster/check_manifest.py ~/wf/runs/<card>'
 ```
 
-After that, every change goes `git push origin <branch>` and `git push cluster <branch>` on the Mac, then
-`git -C ~/wf/stratego pull` on the cluster. Results committed on the cluster go `git push` there, then
-`git pull cluster <branch>` and `git push origin <branch>` on the Mac.
+The last command recomputes git's hash of every file on the cluster, with the standard library and without
+git. It must report that every listed file matches and that no other file is present; it is run right after
+the files arrive, before anything writes into the folder.
 
-Committing on the cluster needs a git identity there (`git config user.name` and `user.email` in the clone).
-That is the PI's to set.
+Results come back by one ssh call per file, `ssh h100 'cat ~/wf/runs/<card>/nca_drones/<path>' > nca_drones/<path>`
+in the working copy on the Mac, where they are committed and pushed to GitHub. The cluster never commits,
+pulls, fetches or pushes, and it needs no git identity and no GitHub key. Before a push the Mac fetches,
+because another session may have pushed to the branch in the meantime.
 
 ### 9.3 Running a command
 
@@ -705,7 +704,7 @@ right. Flags differ between sites: some want `--gpus=1` or `--gres=gpu:h100:1`, 
 A one-line job:
 
 ```
-ssh h100 'cd ~/wf/logs && sbatch --job-name=<name> --partition=<gpu partition> --gres=gpu:1 --cpus-per-task=8 --mem=32G --time=00:30:00 --output=%x-%j.out --wrap "cd ~/wf/stratego && ~/wf/venv/bin/python3 <script and arguments>"'
+ssh h100 'cd ~/wf/logs && sbatch --job-name=<name> --partition=<gpu partition> --gres=gpu:1 --cpus-per-task=8 --mem=32G --time=00:30:00 --output=%x-%j.out --wrap "cd ~/wf/runs/<card> && ~/wf/venv/bin/python3 <script and arguments>"'
 ```
 
 A job script for longer runs lives in the repository under `cluster/jobs/`, so that it is committed with the
@@ -737,22 +736,26 @@ Rules for every job of the new system:
 
 Without a scheduler, the same script is started so that it outlives the connection:
 `ssh h100 'cd ~/wf/logs && CUDA_VISIBLE_DEVICES=0 nohup bash <script> > <name>.out 2>&1 < /dev/null & echo started'`.
+The cluster connected on 27 November has no scheduler and is shared: there, jobs run as Docker containers
+pinned to a GPU that nothing else uses, never to one that another job holds (the phase 0 card says which GPUs
+are free), so the device number above must not be copied blindly.
 
 ### 9.5 Reading results
 
 One ssh call each: `squeue -u $USER` for the queue, `tail -n 30 ~/wf/logs/<name>-<job id>.out` for the output,
 `cat ~/wf/runs/<card>/out/status.json` for the status. Metric tables and text renderings of trajectories are
-read the same way. Files that should be kept (result JSON, logs, the best checkpoint, figures) are copied from
-the run's worktree into the main clone, committed there and come back through git.
+read the same way. Files that should be kept (result JSON, logs, the best checkpoint, figures) come back to the
+Mac by one ssh call each and are committed and pushed there (section 9.2).
 
 ### 9.6 The order of work for every increment
 
 1. Write the card first (`experiments/TEMPLATE.md`): one hypothesis, what would support it, what would refute
    it, the one thing that changes.
-2. Write the code and its tests in the working copy. Commit and push.
-3. On the cluster: pull, then run the whole test suite on CPUs. Nothing gets GPU time before that passes.
+2. Write the code and its tests in the working copy on the Mac. Commit and push.
+3. Send the commit's files to a new run folder on the cluster and check them (section 9.2), then run the whole
+   test suite on the cluster's CPUs. Nothing gets GPU time before that passes.
 4. A smoke run of a few rounds or a few hundred episodes. Read the status file and a handful of trajectories.
-5. The full run as a scheduler job from a worktree at the committed state.
+5. The full run as a scheduler job from that run folder.
 6. Read the result. Look at trajectories of failures, not only at the number. Fill in the card, including the
    GPU-hours actually used. Commit.
 7. One change per run. A failed gate is reported; nothing is added to the learner to get past it.
@@ -764,8 +767,8 @@ substitute for running the tests.
 ### 9.7 Documents
 
 The design page is rebuilt on the cluster with
-`ssh h100 'cd ~/wf/stratego/nca_drones/docs && ~/wf/venv/bin/python3 build_design_page_v2.py wavefront_v2_design.html --standalone'`
-(standard library only) and committed. Without `--standalone` the script writes the page body alone, which is
+`ssh h100 'cd ~/wf/runs/<card>/nca_drones/docs && ~/wf/venv/bin/python3 build_design_page_v2.py wavefront_v2_design.html --standalone'`
+(standard library only), brought back to the Mac and committed there. Without `--standalone` the script writes the page body alone, which is
 what the published copy is made from; only an assistant session can republish it, by reading the published
 page first and then publishing to the same address.
 
@@ -776,28 +779,22 @@ Nothing is trained. Card: `experiments/2026-11-27-p0-arrival.md`. Budget: under 
 
 **Step 1. Connection.** `ssh h100 'hostname && whoami && date -u'`. Expected: three lines, no prompt.
 
-**Step 2. Code.** With the first route of 9.2:
-
-```
-ssh h100 'mkdir -p ~/wf/logs && cd ~/wf && git clone --branch claude/nca-drone-coordination-d2k5kw https://github.com/SimonRullePaderborn/stratego.git && git -C stratego log --oneline -1'
-```
-
-Expected: the last line shows the same commit as `git log --oneline -1` on the Mac. With a deploy key,
-replace the https address by `git@github.com:SimonRullePaderborn/stratego.git`; the https address cannot ask
-for a password over a non-interactive ssh call and fails on a private repository. With the second route, use
-the four commands of 9.2.
+**Step 2. Code.** The commands of 9.2, with `<card>` = `p0` and the commit that the card names, issued from the
+repository root on the Mac. Expected: `COMMIT` holds that commit, and the check reports that every listed file
+matches and that no other file is present. (On 27 November this step first ran as a clone from GitHub on the
+cluster, before the rule of section 4.3 was given; that clone is `~/wf/stratego` and is not used.)
 
 **Step 3. Probe.** It only reads; it changes nothing.
 
 ```
-ssh h100 'cd ~/wf/stratego && bash nca_drones/cluster/probe.sh > ~/wf/logs/probe_login.txt 2>&1; cat ~/wf/logs/probe_login.txt'
-ssh h100 'cd ~/wf/stratego && srun --partition=<gpu partition> --gres=gpu:1 --time=00:05:00 bash nca_drones/cluster/probe.sh > ~/wf/logs/probe_gpu.txt 2>&1; cat ~/wf/logs/probe_gpu.txt'
+ssh h100 'cd ~/wf/runs/p0 && bash nca_drones/cluster/probe.sh > ~/wf/logs/probe_login.txt 2>&1; cat ~/wf/logs/probe_login.txt'
+ssh h100 'cd ~/wf/runs/p0 && srun --partition=<gpu partition> --gres=gpu:1 --time=00:05:00 bash nca_drones/cluster/probe.sh > ~/wf/logs/probe_gpu.txt 2>&1; cat ~/wf/logs/probe_gpu.txt'
 ```
 
 Read from it: which scheduler commands exist; partitions with their time limits and GPUs; the GPU model and
-memory; the Python version and whether PyTorch is already there; free disk space; the HTTP status of GitHub,
-PyPI and the PyTorch download server (000 means unreachable); whether `git push --dry-run` succeeds. The raw
-output is not committed, because it holds account and host names. Its facts go into the card.
+memory; the Python version and whether PyTorch is already there; free disk space; the HTTP status of PyPI and
+the PyTorch download server (000 means unreachable). The probe runs no git command and contacts no GitHub
+address. The raw output is not committed, because it holds account and host names. Its facts go into the card.
 
 **Step 4. Python environment.**
 
@@ -821,7 +818,7 @@ around it (a site mirror, a module, wheels copied by hand) is the PI's choice.
 **Step 5. Throughput.**
 
 ```
-ssh h100 'cd ~/wf/logs && sbatch --job-name=p0-bench --partition=<gpu partition> --gres=gpu:1 --cpus-per-task=8 --mem=32G --time=00:30:00 --output=%x-%j.out --wrap "cd ~/wf/stratego && ~/wf/venv/bin/python3 nca_drones/cluster/bench_rule.py --out nca_drones/results/bench/h100.json"'
+ssh h100 'cd ~/wf/logs && sbatch --job-name=p0-bench --partition=<gpu partition> --gres=gpu:1 --cpus-per-task=8 --mem=32G --time=00:30:00 --output=%x-%j.out --wrap "cd ~/wf/runs/p0 && ~/wf/venv/bin/python3 nca_drones/cluster/bench_rule.py --out nca_drones/results/bench/h100.json"'
 ssh h100 'squeue -u $USER; tail -n 45 ~/wf/logs/p0-bench-*.out'
 ```
 
@@ -842,7 +839,7 @@ directly and replaces D.
 **Step 6. The old tests on a cluster CPU.**
 
 ```
-ssh h100 'cd ~/wf/stratego/nca_drones && srun --partition=<cpu partition> --cpus-per-task=4 --time=00:10:00 ~/wf/venv/bin/python3 test_sim.py; echo exit=$?'
+ssh h100 'cd ~/wf/runs/p0/nca_drones && srun --partition=<cpu partition> --cpus-per-task=4 --time=00:10:00 ~/wf/venv/bin/python3 test_sim.py; echo exit=$?'
 ```
 
 Expected: a few lines of output, no AssertionError, `exit=0`.
@@ -850,7 +847,7 @@ Expected: a few lines of output, no AssertionError, `exit=0`.
 **Step 7. The stored checkpoints, evaluated again.**
 
 ```
-ssh h100 'cd ~/wf/logs && sbatch --job-name=p0-eval --partition=<cpu partition> --cpus-per-task=8 --mem=16G --time=03:00:00 --output=%x-%j.out --wrap "cd ~/wf/stratego/nca_drones && mkdir -p results/p0 && ~/wf/venv/bin/python3 analyze.py results/v10/best_prereg.pt --prereg --out results/p0/v10_prereg.json && ~/wf/venv/bin/python3 analyze.py results/v11_noshared/best_prereg.pt --prereg --out results/p0/v11_prereg.json"'
+ssh h100 'cd ~/wf/logs && sbatch --job-name=p0-eval --partition=<cpu partition> --cpus-per-task=8 --mem=16G --time=03:00:00 --output=%x-%j.out --wrap "cd ~/wf/runs/p0/nca_drones && mkdir -p results/p0 && ~/wf/venv/bin/python3 analyze.py results/v10/best_prereg.pt --prereg --out results/p0/v10_prereg.json && ~/wf/venv/bin/python3 analyze.py results/v11_noshared/best_prereg.pt --prereg --out results/p0/v11_prereg.json"'
 ```
 
 Expected lines for `v10`, as stored in `results/v10/analysis_prereg.out`:
@@ -877,7 +874,7 @@ file times; the limit of three hours for the two is generous.
 behaves before a long run depends on it:
 
 ```
-ssh h100 'cd ~/wf/logs && sbatch --job-name=p0-drill --partition=<cpu partition> --cpus-per-task=2 --mem=8G --time=01:00:00 --output=%x-%j.out --wrap "cd ~/wf/stratego/nca_drones && ~/wf/venv/bin/python3 train.py --name p0_drill --seed 0 --strict 1 --hind 0 --prune 0 --null_k 8 --shared 0.5 --ez 4 --eps_max 0.3 --prefix 0.6 --hard_frac 0.25 --rounds 120 --eval_closed 100 --eval_every 20 --threads 2 --lr_final 0.2"'
+ssh h100 'cd ~/wf/logs && sbatch --job-name=p0-drill --partition=<cpu partition> --cpus-per-task=2 --mem=8G --time=01:00:00 --output=%x-%j.out --wrap "cd ~/wf/runs/p0/nca_drones && ~/wf/venv/bin/python3 train.py --name p0_drill --seed 0 --strict 1 --hind 0 --prune 0 --null_k 8 --shared 0.5 --ez 4 --eps_max 0.3 --prefix 0.6 --hard_frac 0.25 --rounds 120 --eval_closed 100 --eval_every 20 --threads 2 --lr_final 0.2"'
 ```
 
 The trainer writes its checkpoint `runs/p0_drill/ckpt.pt` at rounds 0, 20, 40, 60, 80 and 100. Cancel the job
@@ -908,7 +905,7 @@ Steps 1 to 4 need no decision. Steps 5 to 10 wait for the decisions O2 to O7; st
 ### 11.1 Step 1: the first run of the simulator tests
 
 ```
-ssh h100 'cd ~/wf/stratego/nca_drones && srun --partition=<cpu partition> --cpus-per-task=4 --time=00:10:00 ~/wf/venv/bin/python3 -m wf.test_sim; echo exit=$?'
+ssh h100 'cd ~/wf/runs/<card>/nca_drones && srun --partition=<cpu partition> --cpus-per-task=4 --time=00:10:00 ~/wf/venv/bin/python3 -m wf.test_sim; echo exit=$?'
 ```
 
 Expected: 17 lines that start with `ok`, one per test, in alphabetical order, and `exit=0`. The tests are
@@ -954,8 +951,8 @@ untrained rule has flat tubes, so its drones follow nothing but their exploratio
 needs no rule and no lattice.
 
 ```
-ssh h100 'cd ~/wf/stratego/nca_drones && srun --partition=<gpu partition> --gres=gpu:1 --time=00:20:00 ~/wf/venv/bin/python3 -m wf.yield_table --episodes 256 --out results/p1/untrained_yield_smoke.json'
-ssh h100 'cd ~/wf/logs && sbatch --job-name=p1-yield --partition=<gpu partition> --gres=gpu:1 --cpus-per-task=8 --mem=32G --time=02:00:00 --output=%x-%j.out --wrap "cd ~/wf/stratego/nca_drones && ~/wf/venv/bin/python3 -m wf.yield_table --out results/p1/untrained_yield.json"'
+ssh h100 'cd ~/wf/runs/<card>/nca_drones && srun --partition=<gpu partition> --gres=gpu:1 --time=00:20:00 ~/wf/venv/bin/python3 -m wf.yield_table --episodes 256 --out results/p1/untrained_yield_smoke.json'
+ssh h100 'cd ~/wf/logs && sbatch --job-name=p1-yield --partition=<gpu partition> --gres=gpu:1 --cpus-per-task=8 --mem=32G --time=02:00:00 --output=%x-%j.out --wrap "cd ~/wf/runs/<card>/nca_drones && ~/wf/venv/bin/python3 -m wf.yield_table --out results/p1/untrained_yield.json"'
 ```
 
 The full run uses 4,096 episodes of one 48-step leg for each of 27 table cells: grid sides 12, 16 and 24;
@@ -1115,13 +1112,10 @@ mkdir -p results/p2a
 $py analyze.py runs/$name/best_r900.pt --prereg --out results/p2a/$name.json | tee results/p2a/$name.out
 cp runs/$name/log.jsonl results/p2a/$name.log.jsonl
 cp runs/$name/best_r900.pt results/p2a/$name.best_r900.pt
-mkdir -p ~/wf/stratego/nca_drones/results/p2a
-cp results/p2a/$name.* ~/wf/stratego/nca_drones/results/p2a/
 ```
 
-The script is committed as `cluster/jobs/p2a_old_recipe.sh`, the worktree is made with
-`git -C ~/wf/stratego worktree add --detach ~/wf/runs/p2a <commit>`, and each of the six jobs is submitted
-like this one:
+The script is committed as `cluster/jobs/p2a_old_recipe.sh`, the run folder `~/wf/runs/p2a` is filled from the
+Mac by the commands of section 9.2, and each of the six jobs is submitted like this one:
 
 ```
 ssh h100 'cd ~/wf/logs && sbatch --job-name=p2a_shared_s0 --partition=<cpu partition> --cpus-per-task=2 --mem=8G --time=05:00:00 --output=%x-%j.out ~/wf/runs/p2a/nca_drones/cluster/jobs/p2a_old_recipe.sh p2a_shared_s0 0 0.5'
@@ -1130,7 +1124,7 @@ ssh h100 'cd ~/wf/logs && sbatch --job-name=p2a_shared_s0 --partition=<cpu parti
 The trainer appends to its log, so a name is used once; the script refuses a name whose log exists. Each job
 needs 2 CPU cores and, on the machine that produced the stored runs, took about 8 seconds per round, so about
 2.3 hours for 900 rounds plus about half an hour for the evaluation. `runs/` is ignored by git; what is kept
-goes to `results/p2a/` and is copied into the main clone, where it is committed.
+goes to `results/p2a/` in the run folder, comes back to the Mac and is committed there.
 
 Gate: the three-seed mean of the closed-loop rate on the 2,000 never-posed tasks lies within 5 points of the
 stored run, 75.4% with shared noise and 65.5% without. Report also whether seed 0 reproduces the stored run
@@ -1610,6 +1604,10 @@ improvements per million clone-steps.
     standard errors; the selection audit in one cut of sixteen; a ghost drone in two of 32 trunks; the seed
     blocks of section 11.8; the evaluation settings of phases 3 and 4; the definition of the take-off test.
     All are proposals to be fixed in the card of the first experiment that uses them.
+22. **Code reaches the cluster from the Mac only.** The design page (section 14) has the cluster check out
+    commits, and commit and push its results. By the PI's rule of 27 November all code and all git go through
+    the Mac: the cluster runs no git, the Mac sends the files of a commit over ssh, and results come back to
+    the Mac (sections 4.3 and 9.2).
 
 ## 19. History: the 8x8 result
 
