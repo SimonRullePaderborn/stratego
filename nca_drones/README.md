@@ -318,7 +318,7 @@ Known limits:
 | `prune.py` | earlier experiments (label pruning); off in the audited path |
 | `test_sim.py` | consistency tests |
 | `EVAL_PROTOCOL.md` | the pre-registered final evaluation |
-| `PROGRAMME.md` | state, rules and first steps of the 24x24 / ten-drone programme that follows this work; start here |
+| `PROGRAMME.md` | the complete start plan of the 24x24 / ten-drone programme that follows this work: addresses, rules, decisions, how to connect the cluster, and every phase with its commands and gates; start here |
 | `docs/wavefront_v2_design.html` | version 2 of the design, the plan of record for that programme (not built yet); `docs/build_design_page_v2.py` regenerates it |
 | `docs/unified_wavefront_design.html` | version 1 of the design (superseded); `docs/build_design_page.py` regenerates it |
 | `cluster/` | read-only cluster probe and throughput benchmark for the first cluster session (not executed yet) |
