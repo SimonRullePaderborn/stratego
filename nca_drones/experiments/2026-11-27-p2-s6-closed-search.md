@@ -29,7 +29,9 @@
 * **How it runs:** as step 5 (one container on GPU 1 after the host check, guard inside, 8 CPU cores), from
   `~/wf/runs/p2s6` filled from the Mac:
   `bash cluster/jobs/p2_old_recipe.sh p2s6_closed_s0 0 0.5 --battery 1 --codes 1 --C 32 --hid 128 --threads 8 --sim wf --device cuda --closed_search 1`.
-  It starts when step 5 has left the GPU. If one of steps 1 to 3 or 5 is not kept, this run is void.
+  It starts when step 5 has left the GPU. If one of steps 1 to 3 or 5 is not kept, this run is void. (Added before
+  the run: it uses the job script with `--stop_round 900`, from `~/wf/runs/p2s6b`, for the reason given in the card
+  of step 5.)
 * **Commit:** the commit that holds this card, named in `~/wf/runs/p2s6/COMMIT`.
 * **Cluster job ids:** container `wf-p2s6-s0`.   **Estimated GPU-hours:** 1 to 4 (to be narrowed by the smoke run)
 

@@ -496,6 +496,7 @@ def main():
     ap.add_argument("--codes", type=int, default=0, help="1: each drone draws a one-hot code per episode and reads its tube through it (phase 2, step 2)")
     ap.add_argument("--sim", default="old", choices=("old", "wf"), help="wf: the task is played in the new simulator wf/sim.py (phase 2, step 4)")
     ap.add_argument("--device", default="cpu", help="where the rule runs, e.g. cuda (phase 2, step 5); the simulator and the rollouts stay on the CPU")
+    ap.add_argument("--stop_round", type=int, default=-1, help="stop once this round is logged; the learning-rate schedule still spans --rounds (EVAL_PROTOCOL.md: 900)")
     ap.add_argument("--closed_search", type=int, default=0, help="1: every search episode regrows its own volume at every step (phase 2, step 6)")
     ap.add_argument("--search_bs", type=int, default=2048, help="episodes per call of the rule in closed-loop search")
     args = ap.parse_args()
@@ -776,6 +777,8 @@ def main():
                            os.path.join(out_dir, f"ckpt_{rnd:05d}.pt"))
         logf.write(json.dumps(stats) + "\n")
         logf.flush()
+        if rnd == args.stop_round:
+            break
 
     # The test set (seed 12345) is deliberately NOT evaluated here: it is looked at once, by analyze.py, for the
     # checkpoint that validation selected.
