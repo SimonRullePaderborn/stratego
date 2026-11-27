@@ -40,6 +40,14 @@
 * **Commit:** the commit that holds this card, named in `~/wf/runs/p2s8/COMMIT`.
 * **Cluster job ids:** container `wf-p2s8-s0`.   **Estimated GPU-hours:** under 1 (to be narrowed by the smoke run)
 
+## A first start that was stopped, and the repeat (written before the repeat)
+
+The run `p2s8_kept_s0` from commit `e8b6552` was started on GPU 5 and stopped after about a minute, for the reason
+given in the card of step 7: the bounded update, which this step builds on, gave a NaN loss from round 0. The smoke
+run before it had shown the NaN; the run was started all the same, because only the exit code of the smoke run was
+checked. From now on a smoke run's output is read for a loss that is not finite before a run starts. The run is
+repeated as `p2s8_kept_s0b` from `~/wf/runs/p2s8b`, at the commit that holds this paragraph.
+
 ## After the run
 
 * **Result:**

@@ -794,6 +794,8 @@ def main():
                     loss = tube_loss(own(res[0]), lab_d, cfg, w_d)
                     for tl in (res[2] if taps else ()):
                         loss = loss + 0.3 * tube_loss(own(tl), lab_d, cfg, w_d)
+                if not bool(torch.isfinite(loss)):
+                    raise SystemExit(f"round {rnd}: the loss is {loss.item()}; the run stops instead of training on it")
                 opt.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)

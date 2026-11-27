@@ -29,8 +29,13 @@ def voxel_norm(s, eps=1e-3):
 
 def bound(s):
     """Divide each voxel's state vector by max(1, its root-mean-square over channels): a state inside the unit
-    ball is left alone, a larger one is brought back to it (design version 2, section 5; phase 2, step 7)."""
-    return s / s.pow(2).mean(1, keepdim=True).sqrt().clamp(min=1.0)
+    ball is left alone, a larger one is brought back to it (design version 2, section 5; phase 2, step 7).
+
+    The square root is taken of 1 wherever the state is inside the ball.  Written as sqrt(mean square) clamped at 1,
+    the same value has an infinite derivative at a state of exactly zero, which is where every volume starts, and
+    the gradient becomes NaN (found on 27 November by the first smoke run of step 8)."""
+    ms = s.pow(2).mean(1, keepdim=True)
+    return s / torch.where(ms > 1.0, ms, torch.ones_like(ms)).sqrt()
 
 
 class SpaceTimeNCA(nn.Module):

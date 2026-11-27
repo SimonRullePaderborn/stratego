@@ -327,7 +327,18 @@ def test_bound():
         _, state = model(cond, 60)
     rms = state.pow(2).mean(1).sqrt()
     assert float(rms.max()) <= 1.0 + 1e-5 and float(rms.max()) > 0.99, "after 60 iterations the largest voxel sits on the bound"
-    print(f"bound: small states unchanged, large ones scaled to 1; after 60 iterations the largest root-mean-square is {float(rms.max()):.4f}")
+    # a volume starts at a state of exactly zero, and the trainer's update layer starts at zero too: gradients must be finite
+    z = torch.zeros(1, 4, 1, 1, 1, requires_grad=True)
+    bound(z).sum().backward()
+    assert bool((z.grad == 1).all()), "at a state of exactly zero the bound is the identity"
+    fresh = SpaceTimeNCA(C=16, hid=32, n_cond=3, n_out=2, update="bound")
+    logits, _ = fresh(cond, 8)
+    logits.sum().backward()
+    grads = [p.grad for p in fresh.parameters() if p.grad is not None]
+    assert grads and all(bool(torch.isfinite(gr).all()) for gr in grads), "finite gradients through a freshly initialised bounded rule"
+    assert float(fresh.out.weight.grad.abs().sum()) > 0, "and the update layer does receive gradient"
+    print(f"bound: small states unchanged, large ones scaled to 1; after 60 iterations the largest root-mean-square is {float(rms.max()):.4f}; "
+          f"finite gradients from the zero state")
 
 
 if __name__ == "__main__":
