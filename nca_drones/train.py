@@ -221,13 +221,14 @@ def grow(model, s, r, g, cfg, K, amp=False, noise=0.0, bs=128, codes=None):
 
     A model with codes (--codes 1) needs codes [n, 2]; its sixteen output maps are reduced to the two drones' own."""
     assert (codes is not None) == uses_codes(model), "codes are given exactly when the model uses them"
+    dev = next(model.parameters()).device          # the rule runs where the model is (--device); the tubes come back to the CPU
     outs = []
     for i in range(0, s.shape[0], bs):
         c = codes[i:i + bs] if codes is not None else None
-        cond = make_cond(s[i:i + bs], r[i:i + bs], g[i:i + bs], cfg, battery=uses_battery(model), codes=c)
-        with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
+        cond = make_cond(s[i:i + bs], r[i:i + bs], g[i:i + bs], cfg, battery=uses_battery(model), codes=c).to(dev)
+        with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(amp)):
             lg, _ = model(cond, K, noise=noise)
-        lg = lg.float()
+        lg = lg.float().cpu()
         outs.append(pick_tubes(lg, c) if c is not None else lg)
     return torch.cat(outs)
 
@@ -266,6 +267,7 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
     hist[:, 0, 0] = s[:, 0] * cfg.W + s[:, 1]
     hist[:, 1, 0] = r[:, 0] * cfg.W + r[:, 1]
     battery = uses_battery(model)
+    dev = next(model.parameters()).device
     codes = eval_codes(model, n)                             # one code per drone for the whole episode
     bhist = torch.zeros(n, cfg.T + 1, dtype=torch.long)      # the battery levels the simulator reported
     bhist[:, 0] = env.bat
@@ -279,10 +281,11 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
             for i in range(0, len(act), bs):
                 j = act[i:i + bs]
                 cj = codes[j] if codes is not None else None
-                cond = make_cond(s[j], r[j], g[j], cfg, hist[j], torch.full((len(j),), t), bat=bhist[j], battery=battery, codes=cj)
-                with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
+                cond = make_cond(s[j], r[j], g[j], cfg, hist[j], torch.full((len(j),), t), bat=bhist[j], battery=battery, codes=cj).to(dev)
+                with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(amp)):
                     lg, _ = model(cond, K)
-                logits[j] = pick_tubes(lg.float(), cj) if cj is not None else lg.float()
+                lg = lg.float().cpu()
+                logits[j] = pick_tubes(lg, cj) if cj is not None else lg
         acts = []
         for d, pos in ((0, env.ps), (1, env.pr)):
             c = env.cand(pos)
@@ -388,6 +391,7 @@ def main():
     ap.add_argument("--battery", type=int, default=0, help="1: the seeker's battery level, as the simulator reports it, is an input map (phase 2, step 1)")
     ap.add_argument("--codes", type=int, default=0, help="1: each drone draws a one-hot code per episode and reads its tube through it (phase 2, step 2)")
     ap.add_argument("--sim", default="old", choices=("old", "wf"), help="wf: the task is played in the new simulator wf/sim.py (phase 2, step 4)")
+    ap.add_argument("--device", default="cpu", help="where the rule runs, e.g. cuda (phase 2, step 5); the simulator and the rollouts stay on the CPU")
     args = ap.parse_args()
     if (args.battery or args.codes) and not args.strict:
         raise SystemExit("--battery 1 and --codes 1 are implemented for the audited path only (--strict 1)")
@@ -409,12 +413,13 @@ def main():
     test_need = sample_tasks(200, cfg, torch.Generator().manual_seed(12345), "need")
     held = torch.cat([task_key(*val_need, cfg), task_key(*test_need, cfg), task_key(*val_easy, cfg)]).unique()
 
+    dev = torch.device(args.device)
     model = SpaceTimeNCA(C=args.C, hid=args.hid, n_cond=cond_channels(bool(args.battery), bool(args.codes)),
-                         n_out=N_CODES if args.codes else 2, update=args.update, fire_rate=args.fire_rate)
+                         n_out=N_CODES if args.codes else 2, update=args.update, fire_rate=args.fire_rate).to(dev)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     start_round = 0
     if args.resume:
-        ck = torch.load(args.resume)
+        ck = torch.load(args.resume, map_location=dev)
         model.load_state_dict(ck.get("raw", ck["model"]))
         opt.load_state_dict(ck["opt"])
         start_round = ck.get("round", 0)
@@ -610,12 +615,13 @@ def main():
                     cond = make_cond(bs_, br_, bg_, cfg, battery=bool(args.battery), codes=codes_b)
                 K = args.K + int(torch.randint(-args.K_jitter, args.K_jitter + 1, (1,), generator=gen))
                 taps = (K - args.taps,) if args.taps > 0 else ()
-                with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(args.amp)):
+                cond, lab_d, w_d = cond.to(dev), blab.to(dev), bw.to(dev)
+                with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(args.amp)):
                     res = model(cond, K, taps=taps)
                 own = (lambda lg: pick_tubes(lg, codes_b)) if args.codes else (lambda lg: lg)   # each drone's own tube
-                loss = tube_loss(own(res[0]), blab, cfg, bw)
+                loss = tube_loss(own(res[0]), lab_d, cfg, w_d)
                 for tl in (res[2] if taps else ()):
-                    loss = loss + 0.3 * tube_loss(own(tl), blab, cfg, bw)
+                    loss = loss + 0.3 * tube_loss(own(tl), lab_d, cfg, w_d)
                 opt.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)

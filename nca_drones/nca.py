@@ -45,9 +45,9 @@ class SpaceTimeNCA(nn.Module):
 
     def init_state(self, cond, noise=0.0, gen=None):
         n, _, T1, H, W = cond.shape
-        s = torch.zeros(n, self.C, T1, H, W)
+        s = torch.zeros(n, self.C, T1, H, W, device=cond.device)
         if noise > 0:
-            s = s + noise * torch.randn(s.shape, generator=gen)
+            s = s + noise * torch.randn(s.shape, generator=gen).to(s.device)     # drawn on the CPU on every device
         return s
 
     def step(self, s, cond):
@@ -65,7 +65,7 @@ class SpaceTimeNCA(nn.Module):
             h = F.relu(self.mid(h))
             new = s + self.out(h)
         if self.fire_rate < 1.0 and self.training:
-            m = (torch.rand(s.shape[0], 1, *s.shape[2:]) < self.fire_rate).float()
+            m = (torch.rand(s.shape[0], 1, *s.shape[2:]) < self.fire_rate).float().to(s.device)
             new = m * new + (1 - m) * s
         return new
 

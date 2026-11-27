@@ -9,7 +9,8 @@
 # for example:  p2s0_shared_s0 0 0.5
 #
 # The trainer is started with 1,500 rounds, which sets its learning-rate schedule as in the stored runs, and is
-# stopped once round 900 is in its log. Everything that is kept lands in results/p2/.
+# stopped once round 900 is in its log. Everything that is kept lands in results/p2/. Arguments for the
+# evaluation, such as "--device cuda", are taken from the environment variable ANALYZE_ARGS.
 set -euo pipefail
 name=$1; seed=$2; shared=$3; shift 3
 py=${PY:-/wf/venv/bin/python3}
@@ -26,7 +27,7 @@ done
 cp runs/$name/best.pt runs/$name/best_r900.pt
 kill $pid 2>/dev/null || true
 wait $pid 2>/dev/null || true
-$py analyze.py runs/$name/best_r900.pt --prereg --out results/p2/$name.json > results/p2/$name.out 2>&1
+$py analyze.py runs/$name/best_r900.pt --prereg ${ANALYZE_ARGS:-} --out results/p2/$name.json > results/p2/$name.out 2>&1
 cp runs/$name/log.jsonl results/p2/$name.log.jsonl
 cp runs/$name/best_r900.pt results/p2/$name.best_r900.pt
 echo "done $name"

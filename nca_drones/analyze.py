@@ -17,14 +17,15 @@ from nca import N_CODES, SpaceTimeNCA, cond_channels, make_cond, uses_battery, u
 from train import evaluate, evaluate_closed, grow, rollout, task_key
 
 
-def load(path):
-    ck = torch.load(path)
+def load(path, device="cpu"):
+    ck = torch.load(path, map_location="cpu")
     a = ck["args"]
     battery, codes = bool(a.get("battery", 0)), bool(a.get("codes", 0))      # switches of phase 2, steps 1 and 2
     model = SpaceTimeNCA(C=a["C"], hid=a["hid"], n_cond=cond_channels(battery, codes), n_out=N_CODES if codes else 2,
                          update=a["update"], fire_rate=a.get("fire_rate", 1.0))
     model.load_state_dict(ck["model"])
     model.eval()
+    model.to(device)
     env_module.BACKEND = a.get("sim", "old")          # evaluate in the simulator the run was trained in
     load.posed = ck.get("posed")          # tasks posed to the learner up to this checkpoint (None for old runs)
     return model, Cfg(T=a["T"], B=a["B"]), a, ck.get("round", -1)
@@ -183,10 +184,11 @@ if __name__ == "__main__":
     ap.add_argument("--prereg", action="store_true", help="the pre-registered final evaluation (EVAL_PROTOCOL.md)")
     ap.add_argument("--K", type=int, default=0)
     ap.add_argument("--out", default="")
+    ap.add_argument("--device", default="cpu", help="where the rule runs; give the device the run was trained on (phase 2, step 5)")
     args = ap.parse_args()
-    model, cfg, a, rnd = load(args.ckpt)
-    if args.full and uses_codes(model):
-        raise SystemExit("--full (lesions, probes, tube diagnostics) is not written for models with codes; use --prereg")
+    model, cfg, a, rnd = load(args.ckpt, args.device)
+    if args.full and (uses_codes(model) or args.device != "cpu"):
+        raise SystemExit("--full (lesions, probes, tube diagnostics) is written for CPU models without codes; use --prereg")
     K, amp = args.K or a["K"], bool(a.get("amp", 0))
     res = dict(ckpt=args.ckpt, round=rnd, K=K)
 
