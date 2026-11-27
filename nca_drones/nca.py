@@ -87,7 +87,68 @@ class SpaceTimeNCA(nn.Module):
         return logits, s
 
 
-def make_cond(s, r, g, cfg, hist=None, t0=None, bat=None, battery=False):
+N_CODES = 16      # length of a drone's one-hot code (phase 2, step 2); the design allows up to sixteen drones
+
+
+def draw_codes(n, gen, k=2):
+    """For each of n episodes, k distinct code numbers out of N_CODES: [n, k], column 0 the seeker's, column 1 the recharger's."""
+    return torch.rand(n, N_CODES, generator=gen).argsort(1)[:, :k]
+
+
+def pick_tubes(logits, codes):
+    """[n, N_CODES, ...] -> [n, k, ...]: a drone's tube is the output channel that its code names."""
+    return logits[torch.arange(logits.shape[0])[:, None], codes]
+
+
+def cond_channels(battery=False, codes=False):
+    """Number of input maps for the given switches."""
+    if codes:
+        return 1 + (3 if battery else 2) * N_CODES
+    return 4 if battery else 3
+
+
+def uses_codes(model):
+    return model.n_out == N_CODES
+
+
+def uses_battery(model):
+    return model.n_cond in (4, 1 + 3 * N_CODES)
+
+
+def _make_cond_codes(s, r, g, cfg, hist, t0, bat, battery, codes):
+    """The observation seed with codes: map 0 is the target; maps 1..16 hold the seeker on the map its code names,
+    maps 17..32 the recharger likewise, and with battery=True maps 33..48 the seeker's battery level on the map
+    of the seeker's code.  Slices and levels as in make_cond."""
+    n = s.shape[0]
+    nc = cond_channels(battery, True)
+    T1 = cfg.T + 1
+    flat = torch.zeros(n, nc, T1, cfg.H * cfg.W)
+    ar = torch.arange(n)
+    ts = torch.arange(T1)[None].expand(n, -1)
+    flat[ar, 0, 0, g[:, 0] * cfg.W + g[:, 1]] = 1.0
+    if hist is None:
+        start = torch.stack([s[:, 0] * cfg.W + s[:, 1], r[:, 0] * cfg.W + r[:, 1]], 1)      # [n,2] cell numbers
+        cell = start[:, :, None].expand(-1, -1, T1)
+        m = (ts == 0).float()
+        level = torch.ones(n, T1)
+    else:
+        cell = hist
+        m = (ts <= t0[:, None]).float()
+        if battery:
+            assert bat is not None, "a realised past needs the battery levels the simulator reported"
+            level = bat.float() / cfg.B
+            level[:, 0] = 1.0
+    ch_s = 1 + codes[:, 0]
+    ch_r = 1 + N_CODES + codes[:, 1]
+    flat[ar[:, None], ch_s[:, None], ts, cell[:, 0]] = m
+    flat[ar[:, None], ch_r[:, None], ts, cell[:, 1]] = m
+    if battery:
+        ch_b = 1 + 2 * N_CODES + codes[:, 0]
+        flat[ar[:, None], ch_b[:, None], ts, cell[:, 0]] = m * level
+    return flat.reshape(n, nc, T1, cfg.H, cfg.W)
+
+
+def make_cond(s, r, g, cfg, hist=None, t0=None, bat=None, battery=False, codes=None):
     """Observation seed.
 
     Slice t=0 always holds three one-hot maps: seeker, recharger, target.
@@ -100,7 +161,12 @@ def make_cond(s, r, g, cfg, hist=None, t0=None, bat=None, battery=False):
     battery level as a share of the capacity.  Slice 0 holds a full battery,
     which is how every episode starts; the slices of the realised past hold
     the levels the simulator reported (bat [n, T+1], in units of charge).
+
+    codes [n, 2] (phase 2, step 2) replaces the one map per drone by sixteen:
+    each drone is drawn on the map that its code for this episode names.
     """
+    if codes is not None:
+        return _make_cond_codes(s, r, g, cfg, hist, t0, bat, battery, codes)
     n = s.shape[0]
     nc = 4 if battery else 3
     cond = torch.zeros(n, nc, cfg.T + 1, cfg.H, cfg.W)

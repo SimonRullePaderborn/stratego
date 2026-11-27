@@ -222,3 +222,51 @@ def test_battery_input():
 
 if __name__ == "__main__":
     test_battery_input()
+
+
+def test_codes():
+    """Phase 2, step 2: each drone is drawn on the map its code names, and its tube is the output map of that code."""
+    from nca import N_CODES, cond_channels, draw_codes, make_cond, pick_tubes
+    cfg = Cfg()
+    codes = draw_codes(1000, torch.Generator().manual_seed(5))
+    assert codes.shape == (1000, 2) and bool((codes[:, 0] != codes[:, 1]).all()), "two different codes per episode"
+    assert int(codes.min()) == 0 and int(codes.max()) == N_CODES - 1
+    assert len(codes[:, 0].unique()) == N_CODES and len(codes[:, 1].unique()) == N_CODES, "every code occurs for both drones"
+    # the episode of test_battery_input: seeker east from (0,0) through the recharger at (0,3); four steps are history
+    s = torch.tensor([[0, 0]]); r = torch.tensor([[0, 3]]); g = torch.tensor([[0, 6]])
+    env = DroneEnv(s, r, g, cfg)
+    hist = torch.zeros(1, 2, cfg.T + 1, dtype=torch.long)
+    bat = torch.zeros(1, cfg.T + 1, dtype=torch.long)
+    hist[:, 0, 0] = 0; hist[:, 1, 0] = 3; bat[:, 0] = env.bat
+    for t in range(6):
+        env.step(torch.tensor([4]), torch.tensor([0]))
+        hist[:, 0, t + 1] = env.ps[:, 0] * cfg.W + env.ps[:, 1]
+        hist[:, 1, t + 1] = env.pr[:, 0] * cfg.W + env.pr[:, 1]
+        bat[:, t + 1] = env.bat
+    c = torch.tensor([[5, 11]])                              # seeker code 5, recharger code 11
+    cond = make_cond(s, r, g, cfg, hist, torch.tensor([4]), bat=bat, battery=True, codes=c)
+    assert cond.shape[1] == cond_channels(True, True) == 1 + 3 * N_CODES
+    assert float(cond[0, 0, 0, 0, 6]) == 1.0 and int((cond[0, 0] != 0).sum()) == 1, "map 0: the target, in slice 0"
+    ch = cond[0, 1 + 5]
+    assert [float(ch[t, 0, t]) for t in range(5)] == [1.0] * 5 and int((ch != 0).sum()) == 5, "the seeker on the map of its code"
+    ch = cond[0, 1 + N_CODES + 11]
+    assert [float(ch[t, 0, 3]) for t in range(5)] == [1.0] * 5 and int((ch != 0).sum()) == 5, "the recharger on the map of its code"
+    ch = cond[0, 1 + 2 * N_CODES + 5]
+    for t, v in enumerate([1.0, 0.8, 0.6, 1.0, 0.8]):
+        assert abs(float(ch[t, 0, t]) - v) < 1e-6, f"battery level at slice {t}"
+    assert int((ch != 0).sum()) == 5
+    assert int((cond != 0).sum()) == 1 + 5 + 5 + 5, "every other map is empty"
+    start = make_cond(s, r, g, cfg, battery=True, codes=c)
+    assert int((start != 0).sum()) == 4 and float(start[0, 1 + 5, 0, 0, 0]) == 1.0 and float(start[0, 1 + N_CODES + 11, 0, 0, 3]) == 1.0 \
+        and float(start[0, 1 + 2 * N_CODES + 5, 0, 0, 0]) == 1.0, "without a past: slice 0 only"
+    nobat = make_cond(s, r, g, cfg, hist, torch.tensor([4]), codes=c)
+    assert nobat.shape[1] == 1 + 2 * N_CODES and bool((nobat == cond[:, :1 + 2 * N_CODES]).all()), "the battery maps come last"
+    y = torch.arange(2 * N_CODES * 3.0).reshape(2, N_CODES, 3)
+    p = pick_tubes(y, torch.tensor([[5, 11], [0, 15]]))
+    assert p.shape == (2, 2, 3) and bool((p[0, 0] == y[0, 5]).all()) and bool((p[0, 1] == y[0, 11]).all()) \
+        and bool((p[1, 0] == y[1, 0]).all()) and bool((p[1, 1] == y[1, 15]).all()), "a drone's tube is the output map of its code"
+    print("codes: each drone on the map its code names, its tube read from the output map of the same code")
+
+
+if __name__ == "__main__":
+    test_codes()

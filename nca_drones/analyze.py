@@ -12,15 +12,16 @@ import json
 import torch
 
 from env import Cfg, DroneEnv, manhattan, sample_tasks
-from nca import SpaceTimeNCA, make_cond
+from nca import N_CODES, SpaceTimeNCA, cond_channels, make_cond, uses_battery, uses_codes
 from train import evaluate, evaluate_closed, grow, rollout, task_key
 
 
 def load(path):
     ck = torch.load(path)
     a = ck["args"]
-    model = SpaceTimeNCA(C=a["C"], hid=a["hid"], n_cond=4 if a.get("battery", 0) else 3, update=a["update"],
-                         fire_rate=a.get("fire_rate", 1.0))
+    battery, codes = bool(a.get("battery", 0)), bool(a.get("codes", 0))      # switches of phase 2, steps 1 and 2
+    model = SpaceTimeNCA(C=a["C"], hid=a["hid"], n_cond=cond_channels(battery, codes), n_out=N_CODES if codes else 2,
+                         update=a["update"], fire_rate=a.get("fire_rate", 1.0))
     model.load_state_dict(ck["model"])
     model.eval()
     load.posed = ck.get("posed")          # tasks posed to the learner up to this checkpoint (None for old runs)
@@ -86,7 +87,7 @@ def lesions(model, tasks, cfg, K, amp):
         env.step(a_s, torch.zeros(n, dtype=torch.long))
     hover = env.success.float().mean()
     # (b) the recharger is deleted from the observation: how much of the seeker tube changes?
-    cond = make_cond(s, r, g, cfg, battery=model.n_cond == 4)
+    cond = make_cond(s, r, g, cfg, battery=uses_battery(model))
     cond[:, 1] = 0
     with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
         lg2, _ = model(cond, K)
@@ -113,7 +114,7 @@ def battery_probe(model, tasks, cfg, K, amp):
     know t from the seed slice, so the honest question is what the hidden state adds BEYOND time."""
     s, r, g = tasks
     n = s.shape[0]
-    cond = make_cond(s, r, g, cfg, battery=model.n_cond == 4)
+    cond = make_cond(s, r, g, cfg, battery=uses_battery(model))
     with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
         logits, state = model(cond, K)
     logits, state = logits.float(), state.float()
@@ -182,6 +183,8 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="")
     args = ap.parse_args()
     model, cfg, a, rnd = load(args.ckpt)
+    if args.full and uses_codes(model):
+        raise SystemExit("--full (lesions, probes, tube diagnostics) is not written for models with codes; use --prereg")
     K, amp = args.K or a["K"], bool(a.get("amp", 0))
     res = dict(ckpt=args.ckpt, round=rnd, K=K)
 

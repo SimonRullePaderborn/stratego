@@ -32,7 +32,7 @@ import torch
 import torch.nn.functional as F
 
 from env import Cfg, DroneEnv, manhattan, sample_tasks
-from nca import SpaceTimeNCA, make_cond
+from nca import N_CODES, SpaceTimeNCA, cond_channels, draw_codes, make_cond, pick_tubes, uses_battery, uses_codes
 from credit import null_partner_credit
 from prune import credit_batch, prune_batch, verify_labels
 
@@ -215,14 +215,25 @@ def task_key(s, r, g, cfg):
     return ((s[:, 0] * cfg.W + s[:, 1]) * hw + (r[:, 0] * cfg.W + r[:, 1])) * hw + (g[:, 0] * cfg.W + g[:, 1])
 
 
-def grow(model, s, r, g, cfg, K, amp=False, noise=0.0, bs=128):
+def grow(model, s, r, g, cfg, K, amp=False, noise=0.0, bs=128, codes=None):
+    """Grow the volume from the t=0 observation.  Returns the two tubes [n, 2, T+1, H, W] (seeker, recharger).
+
+    A model with codes (--codes 1) needs codes [n, 2]; its sixteen output maps are reduced to the two drones' own."""
+    assert (codes is not None) == uses_codes(model), "codes are given exactly when the model uses them"
     outs = []
     for i in range(0, s.shape[0], bs):
-        cond = make_cond(s[i:i + bs], r[i:i + bs], g[i:i + bs], cfg, battery=model.n_cond == 4)
+        c = codes[i:i + bs] if codes is not None else None
+        cond = make_cond(s[i:i + bs], r[i:i + bs], g[i:i + bs], cfg, battery=uses_battery(model), codes=c)
         with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
             lg, _ = model(cond, K, noise=noise)
-        outs.append(lg.float())
+        lg = lg.float()
+        outs.append(pick_tubes(lg, c) if c is not None else lg)
     return torch.cat(outs)
+
+
+def eval_codes(model, n):
+    """Codes for an evaluation: one draw per episode from a fixed seed, so that an evaluation can be repeated."""
+    return draw_codes(n, torch.Generator().manual_seed(4242)) if uses_codes(model) else None
 
 
 @torch.no_grad()
@@ -230,7 +241,7 @@ def evaluate(model, tasks, cfg, K, amp=False):
     """Greedy open-loop readout of both tubes, executed in the simulator against the real target."""
     model.eval()
     s, r, g = tasks
-    logits = grow(model, s, r, g, cfg, K, amp)
+    logits = grow(model, s, r, g, cfg, K, amp, codes=eval_codes(model, s.shape[0]))
     out = rollout(logits, s, r, g, cfg, M=1)
     model.train()
     return out
@@ -253,7 +264,8 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
     hist = torch.zeros(n, 2, cfg.T + 1, dtype=torch.long)
     hist[:, 0, 0] = s[:, 0] * cfg.W + s[:, 1]
     hist[:, 1, 0] = r[:, 0] * cfg.W + r[:, 1]
-    battery = model.n_cond == 4
+    battery = uses_battery(model)
+    codes = eval_codes(model, n)                             # one code per drone for the whole episode
     bhist = torch.zeros(n, cfg.T + 1, dtype=torch.long)      # the battery levels the simulator reported
     bhist[:, 0] = env.bat
     logits = None
@@ -265,10 +277,11 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
             logits = torch.zeros(n, 2, cfg.T + 1, cfg.H, cfg.W)
             for i in range(0, len(act), bs):
                 j = act[i:i + bs]
-                cond = make_cond(s[j], r[j], g[j], cfg, hist[j], torch.full((len(j),), t), bat=bhist[j], battery=battery)
+                cj = codes[j] if codes is not None else None
+                cond = make_cond(s[j], r[j], g[j], cfg, hist[j], torch.full((len(j),), t), bat=bhist[j], battery=battery, codes=cj)
                 with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
                     lg, _ = model(cond, K)
-                logits[j] = lg.float()
+                logits[j] = pick_tubes(lg.float(), cj) if cj is not None else lg.float()
         acts = []
         for d, pos in ((0, env.ps), (1, env.pr)):
             c = env.cand(pos)
@@ -372,9 +385,10 @@ def main():
     ap.add_argument("--ez", type=int, default=0, help="temporally-extended exploration: max length of a random excursion (0 = single-step noise)")
     ap.add_argument("--resume", default="")
     ap.add_argument("--battery", type=int, default=0, help="1: the seeker's battery level, as the simulator reports it, is an input map (phase 2, step 1)")
+    ap.add_argument("--codes", type=int, default=0, help="1: each drone draws a one-hot code per episode and reads its tube through it (phase 2, step 2)")
     args = ap.parse_args()
-    if args.battery and not args.strict:
-        raise SystemExit("--battery 1 is implemented for the audited path only (--strict 1)")
+    if (args.battery or args.codes) and not args.strict:
+        raise SystemExit("--battery 1 and --codes 1 are implemented for the audited path only (--strict 1)")
 
     cfg = Cfg(T=args.T, B=args.B)
     if args.threads > 0:
@@ -392,7 +406,8 @@ def main():
     test_need = sample_tasks(200, cfg, torch.Generator().manual_seed(12345), "need")
     held = torch.cat([task_key(*val_need, cfg), task_key(*test_need, cfg), task_key(*val_easy, cfg)]).unique()
 
-    model = SpaceTimeNCA(C=args.C, hid=args.hid, n_cond=4 if args.battery else 3, update=args.update, fire_rate=args.fire_rate)
+    model = SpaceTimeNCA(C=args.C, hid=args.hid, n_cond=cond_channels(bool(args.battery), bool(args.codes)),
+                         n_out=N_CODES if args.codes else 2, update=args.update, fire_rate=args.fire_rate)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     start_round = 0
     if args.resume:
@@ -440,7 +455,8 @@ def main():
         need = manhattan(s, g) > cfg.B                      # for logs only
         posed[task_key(s, r, g, cfg)] = True
         with torch.no_grad():
-            logits = grow(ema_model, s, r, g, cfg, args.K, args.amp)
+            codes_s = draw_codes(s.shape[0], gen) if args.codes else None       # a new code per drone for every posed task
+            logits = grow(ema_model, s, r, g, cfg, args.K, args.amp, codes=codes_s)
             ro = rollout(logits, s, r, g if args.strict else None, cfg, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen, ez=args.ez,
                          shared=shared_v, kinematic=bool(args.cross))
         gc = cell_of(g, cfg)
@@ -576,6 +592,8 @@ def main():
         if buf.n >= args.bs:
             for _ in range(args.G):
                 bs_, br_, bg_, blab, bw, bbat = buf.sample(args.bs, gen, args.hard_frac if args.hard_frac >= 0 else None)
+                # codes are labels for one episode: a stored rollout is learned under freshly drawn codes every time
+                codes_b = draw_codes(args.bs, gen) if args.codes else None
                 if args.prefix > 0:
                     # burn a random-length prefix of the rewarded rollout into the past; learn to regrow the rest
                     w_any = (bw[:, 0] > 0).float()
@@ -583,17 +601,18 @@ def main():
                     use = torch.rand(args.bs, generator=gen) < args.prefix
                     tp = (torch.rand(args.bs, generator=gen) * tau_b.float()).long()                # uniform in [0, tau-1]
                     tp = torch.where(use, tp, torch.zeros_like(tp))
-                    cond = make_cond(bs_, br_, bg_, cfg, blab, tp, bat=bbat, battery=bool(args.battery))
+                    cond = make_cond(bs_, br_, bg_, cfg, blab, tp, bat=bbat, battery=bool(args.battery), codes=codes_b)
                     bw = bw * (torch.arange(cfg.T + 1)[None, None] > tp[:, None, None]).float()
                 else:
-                    cond = make_cond(bs_, br_, bg_, cfg, battery=bool(args.battery))
+                    cond = make_cond(bs_, br_, bg_, cfg, battery=bool(args.battery), codes=codes_b)
                 K = args.K + int(torch.randint(-args.K_jitter, args.K_jitter + 1, (1,), generator=gen))
                 taps = (K - args.taps,) if args.taps > 0 else ()
                 with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(args.amp)):
                     res = model(cond, K, taps=taps)
-                loss = tube_loss(res[0], blab, cfg, bw)
+                own = (lambda lg: pick_tubes(lg, codes_b)) if args.codes else (lambda lg: lg)   # each drone's own tube
+                loss = tube_loss(own(res[0]), blab, cfg, bw)
                 for tl in (res[2] if taps else ()):
-                    loss = loss + 0.3 * tube_loss(tl, blab, cfg, bw)
+                    loss = loss + 0.3 * tube_loss(own(tl), blab, cfg, bw)
                 opt.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
