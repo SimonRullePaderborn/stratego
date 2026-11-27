@@ -270,3 +270,40 @@ def test_codes():
 
 if __name__ == "__main__":
     test_codes()
+
+
+def test_closed_loop_search():
+    """Phase 2, step 6: a greedy closed-loop rollout is the closed-loop readout step for step, and it is rollout 0 of a search."""
+    from nca import N_CODES, SpaceTimeNCA, cond_channels
+    from train import eval_codes, evaluate_closed, rollout_closed
+    cfg = Cfg()
+    torch.manual_seed(0)
+    model = SpaceTimeNCA(C=16, hid=32, n_cond=cond_channels(True, True), n_out=N_CODES)
+    torch.nn.init.normal_(model.out.weight, std=0.05)        # the update starts at zero; with weights the tubes are not flat
+    gen = torch.Generator().manual_seed(1)
+    n, M = 24, 4
+    s, r, g = sample_tasks(n, cfg, gen)
+    ref = evaluate_closed(model, (s, r, g), cfg, K=6)
+    codes = eval_codes(model, n)                             # the codes evaluate_closed drew
+    one = rollout_closed(model, s, r, g, cfg, K=6, codes=codes)
+    assert bool((one["success"] == ref["success"]).all()) and bool((one["tau"] == ref["tau"]).all())
+    live = torch.arange(cfg.T + 1)[None] <= ref["tau"][:, None]
+    for d, traj in ((0, one["traj_s"]), (1, one["traj_r"])):
+        assert bool(((traj[..., 0] * cfg.W + traj[..., 1]) == ref["hist"][:, d])[live].all()), "the same cells until the episode ends"
+    eps = torch.tensor([0.0, 0.1, 0.2, 0.3]).repeat(n)
+    greedy = torch.zeros(n * M, dtype=torch.bool); greedy[::M] = True
+    shared = torch.zeros(n * M, dtype=torch.bool); shared[3::M] = True
+    ro = rollout_closed(model, s, r, g, cfg, K=6, M=M, eps=eps, greedy=greedy, gen=gen, ez=4, shared=shared, codes=codes)
+    assert ro["traj_s"].shape == (n * M, cfg.T + 1, 2) and ro["acts"].shape == (n * M, cfg.T, 2) and ro["bat"].shape == (n * M, cfg.T + 1)
+    tid = ro["tid"]
+    assert bool((tid == torch.arange(n).repeat_interleave(M)).all())
+    assert bool((ro["traj_s"][::M] == one["traj_s"]).all()) and bool((ro["traj_r"][::M] == one["traj_r"]).all()) \
+        and bool((ro["tau"][::M] == one["tau"]).all()), "rollout 0 of every task is the greedy one"
+    succ, tau = replay(s[tid], r[tid], g[tid], ro["acts"], cfg)
+    assert bool((succ == ro["success"]).all()) and bool((tau == ro["tau"]).all()), "the recorded actions replay to the same outcome"
+    differ = int((ro["traj_s"].reshape(n, M, -1) != ro["traj_s"].reshape(n, M, -1)[:, :1]).any(-1).any(-1).sum())
+    print(f"closed-loop search: the greedy rollout equals the closed-loop readout on {n} tasks; exploration changed the seeker's path in {differ} of them")
+
+
+if __name__ == "__main__":
+    test_closed_loop_search()

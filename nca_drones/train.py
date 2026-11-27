@@ -134,6 +134,110 @@ def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None
     )
 
 
+@torch.no_grad()
+def rollout_closed(model, s, r, g, cfg, K, amp=False, M=1, eps=None, temp=1.0, greedy=None, gen=None, ez=0, shared=None,
+                   codes=None, bs=256):
+    """Search in closed loop (phase 2, step 6): M simulator episodes per task, each with a volume of its own.
+
+    At every step the volume of every running episode is regrown from scratch with that episode's realised past
+    burned in, exactly as evaluate_closed does, and both drones step along the tubes of that volume in slice t+1.
+    An episode that is over keeps its last volume.  Exploration (eps, temp, greedy, ez, shared) is that of
+    rollout, and so is the returned dict.  With M = 1 and no exploration this is the closed-loop readout.
+
+    codes [N, 2]: one code per drone and task for a model with codes; the M episodes of a task share them."""
+    assert (codes is not None) == uses_codes(model), "codes are given exactly when the model uses them"
+    N = s.shape[0]
+    tid = torch.arange(N).repeat_interleave(M)
+    n = N * M
+    arn = torch.arange(n)
+    S, R, Gt = s[tid], r[tid], g[tid]
+    cds = codes[tid] if codes is not None else None
+    env = make_env(S, R, Gt, cfg)
+    battery, dev = uses_battery(model), next(model.parameters()).device
+    if eps is None:
+        eps = torch.zeros(n)
+    if greedy is None:
+        greedy = torch.ones(n, dtype=torch.bool)
+    if shared is None:
+        shared = torch.zeros(n, dtype=torch.bool)
+    if not torch.is_tensor(temp):
+        temp = torch.full((n,), float(temp))
+    all_greedy = bool(greedy.all())
+    zmax = max(ez, 1)
+    ex_act = torch.zeros(n, 2, dtype=torch.long)
+    ex_left = torch.zeros(n, 2, dtype=torch.long)
+    hist = torch.zeros(n, 2, cfg.T + 1, dtype=torch.long)     # realised cells, burned into the past slices
+    hist[:, 0, 0] = S[:, 0] * cfg.W + S[:, 1]
+    hist[:, 1, 0] = R[:, 0] * cfg.W + R[:, 1]
+    bhist = torch.zeros(n, cfg.T + 1, dtype=torch.long)       # the battery levels the simulator reported
+    bhist[:, 0] = env.bat
+    vol = torch.zeros(n, 2, cfg.T + 1, cfg.H, cfg.W)          # each episode's own two tubes, as last regrown
+    traj_s, traj_r, acts = [env.ps.clone()], [env.pr.clone()], []
+    traj_b = [env.bat.clone()]
+    logp = torch.zeros(n)
+    cum = [logp.clone()]
+    lpd = torch.zeros(n, 2)
+    cumd = [lpd.clone()]
+    ret = torch.zeros(n)
+
+    def gumbel(*shape):
+        u = torch.rand(*shape, generator=gen).clamp_(1e-9, 1 - 1e-9)
+        return -torch.log(-torch.log(u))
+
+    for t in range(cfg.T):
+        active = ~env.done
+        run = torch.nonzero(active).squeeze(1)
+        for i in range(0, len(run), bs):
+            j = run[i:i + bs]
+            cj = cds[j] if cds is not None else None
+            cond = make_cond(S[j], R[j], Gt[j], cfg, hist[j], torch.full((len(j),), t), bat=bhist[j], battery=battery, codes=cj).to(dev)
+            with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(amp)):
+                lg, _ = model(cond, K)
+            lg = lg.float().cpu()
+            vol[j] = pick_tubes(lg, cj) if cj is not None else lg
+        step_acts = []
+        lp_t = torch.zeros(n)
+        if not all_greedy:
+            G = gumbel(n, cfg.H, cfg.W)
+            u = torch.rand(n, 2, generator=gen)
+            na = torch.randint(0, 5, (n, 2), generator=gen)
+            nl = torch.randint(1, zmax + 1, (n, 2), generator=gen)
+            u[:, 1] = torch.where(shared, u[:, 0], u[:, 1])
+            na[:, 1] = torch.where(shared, na[:, 0], na[:, 1])
+            nl[:, 1] = torch.where(shared, nl[:, 0], nl[:, 1])
+        for d, pos in ((0, env.ps), (1, env.pr)):
+            c = env.cand(pos)                                                   # [n,5,2] reachable cells
+            lg = vol[arn[:, None], d, t + 1, c[..., 0], c[..., 1]]              # [n,5] their tube logits
+            a = lg.argmax(1)
+            logq = F.log_softmax(lg / temp[:, None], -1)
+            if not all_greedy:
+                gs = G[arn[:, None], c[..., 0], c[..., 1]]
+                noise = torch.where(shared[:, None], gs, gumbel(n, 5))
+                a_s = (logq + noise).argmax(1)
+                start = (u[:, d] < eps) & (ex_left[:, d] == 0)
+                ex_act[:, d] = torch.where(start, na[:, d], ex_act[:, d])
+                ex_left[:, d] = torch.where(start, nl[:, d], ex_left[:, d])
+                a_s = torch.where(ex_left[:, d] > 0, ex_act[:, d], a_s)
+                ex_left[:, d] = (ex_left[:, d] - 1).clamp(min=0)
+                a = torch.where(greedy, a, a_s)
+            lp_t = lp_t + logq[arn, a]
+            lpd[:, d] = lpd[:, d] + logq[arn, a]
+            step_acts.append(a)
+        logp = logp + torch.where(active, lp_t, torch.zeros(n))
+        ret = ret + env.step(step_acts[0], step_acts[1])
+        hist[:, 0, t + 1] = env.ps[:, 0] * cfg.W + env.ps[:, 1]
+        hist[:, 1, t + 1] = env.pr[:, 0] * cfg.W + env.pr[:, 1]
+        bhist[:, t + 1] = env.bat
+        traj_s.append(env.ps.clone()); traj_r.append(env.pr.clone()); traj_b.append(env.bat.clone())
+        acts.append(torch.stack(step_acts, -1)); cum.append(logp.clone()); cumd.append(lpd.clone())
+    return dict(
+        cumlogp_d=torch.stack(cumd, 1), bat=torch.stack(traj_b, 1),
+        traj_s=torch.stack(traj_s, 1), traj_r=torch.stack(traj_r, 1), acts=torch.stack(acts, 1),
+        success=ret > 0, tau=env.tau.clone(), logp=logp, cumlogp=torch.stack(cum, 1), tid=tid,
+        n_recharge=env.n_recharge.clone(),
+    )
+
+
 def hindsight_table(ro, N, M, cfg):
     """For every task and every cell: the earliest rewarded arrival among its M rollouts.
 
@@ -392,9 +496,11 @@ def main():
     ap.add_argument("--codes", type=int, default=0, help="1: each drone draws a one-hot code per episode and reads its tube through it (phase 2, step 2)")
     ap.add_argument("--sim", default="old", choices=("old", "wf"), help="wf: the task is played in the new simulator wf/sim.py (phase 2, step 4)")
     ap.add_argument("--device", default="cpu", help="where the rule runs, e.g. cuda (phase 2, step 5); the simulator and the rollouts stay on the CPU")
+    ap.add_argument("--closed_search", type=int, default=0, help="1: every search episode regrows its own volume at every step (phase 2, step 6)")
+    ap.add_argument("--search_bs", type=int, default=2048, help="episodes per call of the rule in closed-loop search")
     args = ap.parse_args()
-    if (args.battery or args.codes) and not args.strict:
-        raise SystemExit("--battery 1 and --codes 1 are implemented for the audited path only (--strict 1)")
+    if (args.battery or args.codes or args.closed_search) and not args.strict:
+        raise SystemExit("--battery 1, --codes 1 and --closed_search 1 are implemented for the audited path only (--strict 1)")
     env_module.BACKEND = args.sim
 
     cfg = Cfg(T=args.T, B=args.B)
@@ -464,9 +570,13 @@ def main():
         posed[task_key(s, r, g, cfg)] = True
         with torch.no_grad():
             codes_s = draw_codes(s.shape[0], gen) if args.codes else None       # a new code per drone for every posed task
-            logits = grow(ema_model, s, r, g, cfg, args.K, args.amp, codes=codes_s)
-            ro = rollout(logits, s, r, g if args.strict else None, cfg, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen, ez=args.ez,
-                         shared=shared_v, kinematic=bool(args.cross))
+            if args.closed_search:
+                ro = rollout_closed(ema_model, s, r, g, cfg, args.K, args.amp, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen,
+                                    ez=args.ez, shared=shared_v, codes=codes_s, bs=args.search_bs)
+            else:
+                logits = grow(ema_model, s, r, g, cfg, args.K, args.amp, codes=codes_s)
+                ro = rollout(logits, s, r, g if args.strict else None, cfg, M=M, eps=eps, temp=temp_v, greedy=greedy, gen=gen, ez=args.ez,
+                             shared=shared_v, kinematic=bool(args.cross))
         gc = cell_of(g, cfg)
         pr_stats = []
         xstats = {}
