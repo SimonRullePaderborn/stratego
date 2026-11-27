@@ -70,7 +70,8 @@ search and training rows before phase 2 (last column of the table in section 15 
 | Design version 1 (superseded) | `docs/unified_wavefront_design.html`; published copy https://claude.ai/artifact/FECZfdW6MjZgEE5TNPsQoz |
 | Measured 8x8 baseline | `README.md`, `EVAL_PROTOCOL.md`, `results/` |
 | Cluster kit, not yet executed anywhere | `cluster/probe.sh`, `cluster/bench_rule.py` |
-| Simulator, map generator and their tests, not yet executed anywhere | `wf/sim.py`, `wf/maps.py`, `wf/test_sim.py` (run with `cd nca_drones && python3 -m wf.test_sim`) |
+| Simulator, map generator and their tests, not yet executed anywhere | `wf/sim.py`, `wf/maps.py`, `wf/test_sim.py` (run with `cd nca_drones && python3 -m wf.test_sim`). Reviewed by reading only: every assertion was traced by hand |
+| Exploration noise and the first measurement, not yet executed anywhere | `wf/explore.py`, `wf/yield_table.py` (run with `cd nca_drones && python3 -m wf.yield_table`); card `experiments/2026-11-27-p1-untrained-yield.md` |
 | Experiment cards | `experiments/`, one file per experiment, from `experiments/TEMPLATE.md` |
 
 ## 6. First session on the cluster (phase 0)

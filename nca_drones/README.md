@@ -322,6 +322,7 @@ Known limits:
 | `docs/wavefront_v2_design.html` | version 2 of the design, the plan of record for that programme (not built yet); `docs/build_design_page_v2.py` regenerates it |
 | `docs/unified_wavefront_design.html` | version 1 of the design (superseded); `docs/build_design_page.py` regenerates it |
 | `cluster/` | read-only cluster probe and throughput benchmark for the first cluster session (not executed yet) |
+| `wf/` | code of the new programme: batched simulator, map generator, exploration noise, first measurement script, tests (not executed yet; cluster only) |
 | `experiments/` | one card per experiment of the new programme |
 | `probe_extensions.py`, `diag_search.py`, `diag_open_closed.py` | zero-shot probes and diagnostics used by that specification |
 | `results/` | logs, analysis JSON and checkpoints of the reported runs |
