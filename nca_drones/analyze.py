@@ -19,7 +19,8 @@ from train import evaluate, evaluate_closed, grow, rollout, task_key
 def load(path):
     ck = torch.load(path)
     a = ck["args"]
-    model = SpaceTimeNCA(C=a["C"], hid=a["hid"], update=a["update"], fire_rate=a.get("fire_rate", 1.0))
+    model = SpaceTimeNCA(C=a["C"], hid=a["hid"], n_cond=4 if a.get("battery", 0) else 3, update=a["update"],
+                         fire_rate=a.get("fire_rate", 1.0))
     model.load_state_dict(ck["model"])
     model.eval()
     load.posed = ck.get("posed")          # tasks posed to the learner up to this checkpoint (None for old runs)
@@ -85,7 +86,7 @@ def lesions(model, tasks, cfg, K, amp):
         env.step(a_s, torch.zeros(n, dtype=torch.long))
     hover = env.success.float().mean()
     # (b) the recharger is deleted from the observation: how much of the seeker tube changes?
-    cond = make_cond(s, r, g, cfg)
+    cond = make_cond(s, r, g, cfg, battery=model.n_cond == 4)
     cond[:, 1] = 0
     with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
         lg2, _ = model(cond, K)
@@ -112,7 +113,7 @@ def battery_probe(model, tasks, cfg, K, amp):
     know t from the seed slice, so the honest question is what the hidden state adds BEYOND time."""
     s, r, g = tasks
     n = s.shape[0]
-    cond = make_cond(s, r, g, cfg)
+    cond = make_cond(s, r, g, cfg, battery=model.n_cond == 4)
     with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
         logits, state = model(cond, K)
     logits, state = logits.float(), state.float()

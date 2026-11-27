@@ -178,3 +178,47 @@ def test_null_partner_credit():
 
 if __name__ == "__main__":
     test_null_partner_credit()
+
+
+def test_battery_input():
+    """Phase 2, step 1: the battery map holds the simulator's own level, on the seeker's cell, for the realised past only."""
+    from nca import make_cond
+    cfg = Cfg()
+    # seeker walks east from (0,0) through the recharger waiting at (0,3) to the target at (0,6)
+    s = torch.tensor([[0, 0]]); r = torch.tensor([[0, 3]]); g = torch.tensor([[0, 6]])
+    env = DroneEnv(s, r, g, cfg)
+    hist = torch.zeros(1, 2, cfg.T + 1, dtype=torch.long)
+    bat = torch.zeros(1, cfg.T + 1, dtype=torch.long)
+    hist[:, 0, 0] = 0; hist[:, 1, 0] = 3; bat[:, 0] = env.bat
+    for t in range(6):
+        env.step(torch.tensor([4]), torch.tensor([0]))
+        hist[:, 0, t + 1] = env.ps[:, 0] * cfg.W + env.ps[:, 1]
+        hist[:, 1, t + 1] = env.pr[:, 0] * cfg.W + env.pr[:, 1]
+        bat[:, t + 1] = env.bat
+    assert bat[0, :7].tolist() == [5, 4, 3, 5, 4, 3, 2] and bool(env.success), "one unit per step, full again at the meeting"
+    t0 = torch.tensor([4])                                   # the first four steps are history
+    plain = make_cond(s, r, g, cfg, hist, t0)
+    cond = make_cond(s, r, g, cfg, hist, t0, bat=bat, battery=True)
+    assert cond.shape[1] == 4 and bool((cond[:, :3] == plain).all()), "the three position maps are unchanged"
+    want = {(0, 0): 1.0, (1, 1): 0.8, (2, 2): 0.6, (3, 3): 1.0, (4, 4): 0.8}          # (slice, column) -> level / B
+    ch = cond[0, 3]
+    for (t, col), v in want.items():
+        assert abs(float(ch[t, 0, col]) - v) < 1e-6, f"battery map at slice {t}"
+    assert int((ch != 0).sum()) == len(want), "nothing beyond the realised past, nothing off the seeker's cell"
+    start = make_cond(s, r, g, cfg, battery=True)
+    assert float(start[0, 3, 0, 0, 0]) == 1.0 and int((start[0, 3] != 0).sum()) == 1, "a full battery at t = 0"
+    # the trace that rollout records is the simulator's own
+    gen = torch.Generator().manual_seed(3)
+    s2, r2, g2 = sample_tasks(16, cfg, gen)
+    logits = torch.randn(16, 2, cfg.T + 1, cfg.H, cfg.W, generator=gen)
+    ro = rollout(logits, s2, r2, g2, cfg, M=1)
+    env = DroneEnv(s2, r2, g2, cfg)
+    assert bool((ro["bat"][:, 0] == cfg.B).all())
+    for t in range(cfg.T):
+        env.step(ro["acts"][:, t, 0], ro["acts"][:, t, 1])
+        assert bool((ro["bat"][:, t + 1] == env.bat).all()), f"battery trace differs at step {t + 1}"
+    print("battery input: the map holds the simulator's level on the seeker's cell, for the realised past only")
+
+
+if __name__ == "__main__":
+    test_battery_input()

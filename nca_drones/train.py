@@ -13,7 +13,8 @@ One "round" (the audited path, --strict 1):
 
 The only teacher is the simulator's 0/1 reward.  No solver, no dynamic
 programming, no distance feature, no shaped reward.  The battery level is
-never observed.
+never observed, unless the run is started with --battery 1 (phase 2, step 1):
+then the level that the simulator reports is one more input map.
 
 Older experimental paths are kept for the record and are OFF in the audited
 configuration: hindsight relabelling (--hind), label pruning (--prune 1,
@@ -79,6 +80,7 @@ def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None
     ex_act = torch.zeros(n, 2, dtype=torch.long)
     ex_left = torch.zeros(n, 2, dtype=torch.long)
     traj_s, traj_r, acts = [env.ps.clone()], [env.pr.clone()], []
+    traj_b = [env.bat.clone()]                # the battery level the simulator reports (an input with --battery 1)
     logp = torch.zeros(n)
     cum = [logp.clone()]
     lpd = torch.zeros(n, 2)
@@ -121,10 +123,10 @@ def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None
             step_acts.append(a)
         logp = logp + torch.where(active, lp_t, torch.zeros(n))
         ret = ret + env.step(step_acts[0], step_acts[1])
-        traj_s.append(env.ps.clone()); traj_r.append(env.pr.clone())
+        traj_s.append(env.ps.clone()); traj_r.append(env.pr.clone()); traj_b.append(env.bat.clone())
         acts.append(torch.stack(step_acts, -1)); cum.append(logp.clone()); cumd.append(lpd.clone())
     return dict(
-        cumlogp_d=torch.stack(cumd, 1),
+        cumlogp_d=torch.stack(cumd, 1), bat=torch.stack(traj_b, 1),
         traj_s=torch.stack(traj_s, 1), traj_r=torch.stack(traj_r, 1), acts=torch.stack(acts, 1),
         success=ret > 0, tau=env.tau.clone(), logp=logp, cumlogp=torch.stack(cum, 1), tid=tid,
         n_recharge=env.n_recharge.clone(),
@@ -216,7 +218,7 @@ def task_key(s, r, g, cfg):
 def grow(model, s, r, g, cfg, K, amp=False, noise=0.0, bs=128):
     outs = []
     for i in range(0, s.shape[0], bs):
-        cond = make_cond(s[i:i + bs], r[i:i + bs], g[i:i + bs], cfg)
+        cond = make_cond(s[i:i + bs], r[i:i + bs], g[i:i + bs], cfg, battery=model.n_cond == 4)
         with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
             lg, _ = model(cond, K, noise=noise)
         outs.append(lg.float())
@@ -241,7 +243,8 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
     At every step the positions the simulator actually produced are burned into
     the past slices, the tissue regrows the future from scratch, and both
     drones take the greedy step along their tubes.  The network never sees the
-    battery, the reward or a done flag - only where the two drones have been.
+    reward or a done flag - only where the two drones have been and, if it was
+    trained with --battery 1, the seeker's battery level in those slices.
     """
     model.eval()
     s, r, g = tasks
@@ -250,6 +253,9 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
     hist = torch.zeros(n, 2, cfg.T + 1, dtype=torch.long)
     hist[:, 0, 0] = s[:, 0] * cfg.W + s[:, 1]
     hist[:, 1, 0] = r[:, 0] * cfg.W + r[:, 1]
+    battery = model.n_cond == 4
+    bhist = torch.zeros(n, cfg.T + 1, dtype=torch.long)      # the battery levels the simulator reported
+    bhist[:, 0] = env.bat
     logits = None
     for t in range(cfg.T):
         act = torch.nonzero(~env.done).squeeze(1)
@@ -259,7 +265,7 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
             logits = torch.zeros(n, 2, cfg.T + 1, cfg.H, cfg.W)
             for i in range(0, len(act), bs):
                 j = act[i:i + bs]
-                cond = make_cond(s[j], r[j], g[j], cfg, hist[j], torch.full((len(j),), t))
+                cond = make_cond(s[j], r[j], g[j], cfg, hist[j], torch.full((len(j),), t), bat=bhist[j], battery=battery)
                 with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
                     lg, _ = model(cond, K)
                 logits[j] = lg.float()
@@ -271,6 +277,7 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
         env.step(acts[0], acts[1])
         hist[:, 0, t + 1] = env.ps[:, 0] * cfg.W + env.ps[:, 1]
         hist[:, 1, t + 1] = env.pr[:, 0] * cfg.W + env.pr[:, 1]
+        bhist[:, t + 1] = env.bat
     model.train()
     return dict(success=env.success.clone(), tau=env.tau.clone(), n_recharge=env.n_recharge.clone(), hist=hist)
 
@@ -284,17 +291,20 @@ class Buffer:
         self.r = torch.zeros(cap, 2, dtype=torch.long)
         self.g = torch.zeros(cap, 2, dtype=torch.long)
         self.lab = torch.zeros(cap, 2, cfg.T + 1, dtype=torch.long)
+        self.bat = torch.full((cap, cfg.T + 1), cfg.B, dtype=torch.long)   # battery trace of the rollout (--battery 1)
         self.w = torch.ones(cap, 2, cfg.T + 1)
         self.hard = torch.zeros(cap, dtype=torch.bool)   # search found reward where the greedy readout got none
         self.meta = torch.zeros(cap, 3, dtype=torch.long)  # bookkeeping for logs only: tau, needs-recharge, source
         self.n = 0
         self.ptr = 0
 
-    def add(self, s, r, g, lab, hard, meta, w=None):
+    def add(self, s, r, g, lab, hard, meta, w=None, bat=None):
         k = s.shape[0]
         idx = (self.ptr + torch.arange(k)) % self.cap
         self.s[idx], self.r[idx], self.g[idx], self.lab[idx], self.hard[idx], self.meta[idx] = s, r, g, lab, hard, meta
         self.w[idx] = w if w is not None else 1.0
+        if bat is not None:
+            self.bat[idx] = bat
         self.ptr = int((self.ptr + k) % self.cap)
         self.n = min(self.n + k, self.cap)
 
@@ -313,7 +323,7 @@ class Buffer:
             idx = torch.cat([a, b])
         else:
             idx = torch.randint(self.n, (bs,), generator=gen)
-        return self.s[idx], self.r[idx], self.g[idx], self.lab[idx], self.w[idx]
+        return self.s[idx], self.r[idx], self.g[idx], self.lab[idx], self.w[idx], self.bat[idx]
 
 
 def cell_of(p, cfg):
@@ -361,7 +371,10 @@ def main():
     ap.add_argument("--shared", type=float, default=0.0, help="share of rollouts whose sampling noise is a shared random medium on the voxels")
     ap.add_argument("--ez", type=int, default=0, help="temporally-extended exploration: max length of a random excursion (0 = single-step noise)")
     ap.add_argument("--resume", default="")
+    ap.add_argument("--battery", type=int, default=0, help="1: the seeker's battery level, as the simulator reports it, is an input map (phase 2, step 1)")
     args = ap.parse_args()
+    if args.battery and not args.strict:
+        raise SystemExit("--battery 1 is implemented for the audited path only (--strict 1)")
 
     cfg = Cfg(T=args.T, B=args.B)
     if args.threads > 0:
@@ -379,7 +392,7 @@ def main():
     test_need = sample_tasks(200, cfg, torch.Generator().manual_seed(12345), "need")
     held = torch.cat([task_key(*val_need, cfg), task_key(*test_need, cfg), task_key(*val_easy, cfg)]).unique()
 
-    model = SpaceTimeNCA(C=args.C, hid=args.hid, update=args.update, fire_rate=args.fire_rate)
+    model = SpaceTimeNCA(C=args.C, hid=args.hid, n_cond=4 if args.battery else 3, update=args.update, fire_rate=args.fire_rate)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     start_round = 0
     if args.resume:
@@ -458,7 +471,7 @@ def main():
                                  w_s[need[i]].mean() if need[i].any() else torch.tensor(float("nan")),
                                  w_r.mean(), w_r[need[i]].mean() if need[i].any() else torch.tensor(float("nan"))))
                 meta = torch.stack([tau_i, need[i].long(), torch.zeros_like(tau_i)], 1)
-                buf.add(s[i], r[i], g[i], lab, ~greedy_succ[i], meta, wts)
+                buf.add(s[i], r[i], g[i], lab, ~greedy_succ[i], meta, wts, bat=ro["bat"][sel])
             best_time = fv = None
         elif args.cross:
             # every sampled seeker worldline against every sampled recharger worldline, judged by the simulator
@@ -562,7 +575,7 @@ def main():
         losses = []
         if buf.n >= args.bs:
             for _ in range(args.G):
-                bs_, br_, bg_, blab, bw = buf.sample(args.bs, gen, args.hard_frac if args.hard_frac >= 0 else None)
+                bs_, br_, bg_, blab, bw, bbat = buf.sample(args.bs, gen, args.hard_frac if args.hard_frac >= 0 else None)
                 if args.prefix > 0:
                     # burn a random-length prefix of the rewarded rollout into the past; learn to regrow the rest
                     w_any = (bw[:, 0] > 0).float()
@@ -570,10 +583,10 @@ def main():
                     use = torch.rand(args.bs, generator=gen) < args.prefix
                     tp = (torch.rand(args.bs, generator=gen) * tau_b.float()).long()                # uniform in [0, tau-1]
                     tp = torch.where(use, tp, torch.zeros_like(tp))
-                    cond = make_cond(bs_, br_, bg_, cfg, blab, tp)
+                    cond = make_cond(bs_, br_, bg_, cfg, blab, tp, bat=bbat, battery=bool(args.battery))
                     bw = bw * (torch.arange(cfg.T + 1)[None, None] > tp[:, None, None]).float()
                 else:
-                    cond = make_cond(bs_, br_, bg_, cfg)
+                    cond = make_cond(bs_, br_, bg_, cfg, battery=bool(args.battery))
                 K = args.K + int(torch.randint(-args.K_jitter, args.K_jitter + 1, (1,), generator=gen))
                 taps = (K - args.taps,) if args.taps > 0 else ()
                 with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(args.amp)):

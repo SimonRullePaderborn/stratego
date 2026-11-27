@@ -6,6 +6,8 @@ slice 0: seeker, recharger, target) and, in closed-loop mode only, where the two
 drones have actually been in the slices of the past.  Everything else - the
 target's persistence through time, any notion of distance, the battery, the
 recharge coupling - has to be invented by the rule in its hidden channels.
+(From phase 2, step 1 on, the seeker's battery level can be shown as a fourth
+map; see make_cond.  The measured runs v10 and v11_noshared did not have it.)
 
 Perception is a plain 3x3x3 convolution with zero padding, followed by a
 per-voxel MLP.  No coordinate channels, no pooling, no global operations.
@@ -85,7 +87,7 @@ class SpaceTimeNCA(nn.Module):
         return logits, s
 
 
-def make_cond(s, r, g, cfg, hist=None, t0=None):
+def make_cond(s, r, g, cfg, hist=None, t0=None, bat=None, battery=False):
     """Observation seed.
 
     Slice t=0 always holds three one-hot maps: seeker, recharger, target.
@@ -93,19 +95,32 @@ def make_cond(s, r, g, cfg, hist=None, t0=None):
     t <= t0 the seeker / recharger maps hold where the drones actually were
     (hist [n, 2, T+1] cell indices, t0 [n]).  The tissue then has to grow the
     future around a fixed past - nothing else about the world is told to it.
+
+    battery=True adds a fourth map (phase 2, step 1): on the seeker's cell, its
+    battery level as a share of the capacity.  Slice 0 holds a full battery,
+    which is how every episode starts; the slices of the realised past hold
+    the levels the simulator reported (bat [n, T+1], in units of charge).
     """
     n = s.shape[0]
-    cond = torch.zeros(n, 3, cfg.T + 1, cfg.H, cfg.W)
+    nc = 4 if battery else 3
+    cond = torch.zeros(n, nc, cfg.T + 1, cfg.H, cfg.W)
     ar = torch.arange(n)
     cond[ar, 0, 0, s[:, 0], s[:, 1]] = 1.0
     cond[ar, 1, 0, r[:, 0], r[:, 1]] = 1.0
     cond[ar, 2, 0, g[:, 0], g[:, 1]] = 1.0
+    if battery:
+        cond[ar, 3, 0, s[:, 0], s[:, 1]] = 1.0
     if hist is not None:
         ts = torch.arange(cfg.T + 1)[None].expand(n, -1)
         m = ts <= t0[:, None]                                  # [n,T+1] slices that are already history
-        flat = cond.reshape(n, 3, cfg.T + 1, cfg.H * cfg.W)
+        flat = cond.reshape(n, nc, cfg.T + 1, cfg.H * cfg.W)
         for d in (0, 1):
             oh = F.one_hot(hist[:, d], cfg.H * cfg.W).float() * m[..., None]
             flat[:, d] = torch.maximum(flat[:, d], oh)
-        cond = flat.reshape(n, 3, cfg.T + 1, cfg.H, cfg.W)
+        if battery:
+            assert bat is not None, "a realised past needs the battery levels the simulator reported"
+            level = bat.float() / cfg.B * m                    # [n,T+1], zero outside the realised past
+            level[:, 0] = 1.0
+            flat[:, 3] = F.one_hot(hist[:, 0], cfg.H * cfg.W).float() * level[..., None]
+        cond = flat.reshape(n, nc, cfg.T + 1, cfg.H, cfg.W)
     return cond

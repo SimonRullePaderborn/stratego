@@ -13,7 +13,8 @@ World
 
 What the learner takes from this file: `step` (positions after the move, the
 0/1 reward, and whether the episode is over), `cand` (which cell each of the
-5 actions leads to) and `replay`.  The battery level is never observed.
+5 actions leads to) and `replay`.  The battery level is never observed,
+unless the trainer runs with --battery 1 (phase 2, step 1), which reads `bat`.
 The task sampler uses Manhattan distance and B to guarantee feasible tasks and
 to define the "recharge-needed" evaluation set; that is part of the
 environment, not of the learner.
