@@ -34,7 +34,9 @@
   and a smoke run on the GPU.
 * **How it runs:** as steps 6 and 7, from `~/wf/runs/p2s8` filled from the Mac:
   `bash cluster/jobs/p2_old_recipe.sh p2s8_kept_s0 0 0.5 --battery 1 --codes 1 --C 32 --hid 128 --threads 8 --sim wf --device cuda --closed_search 1 --update bound --kept 1`.
-  If an earlier step is not kept, this run is void.
+  If an earlier step is not kept, this run is void. (Added before the run: the PI allowed the node's idle GPUs on
+  27 November, so this run starts at once on GPU 5, after the same check and with the same guard, while steps 6 and
+  7 are still running on GPUs 1 and 4.)
 * **Commit:** the commit that holds this card, named in `~/wf/runs/p2s8/COMMIT`.
 * **Cluster job ids:** container `wf-p2s8-s0`.   **Estimated GPU-hours:** under 1 (to be narrowed by the smoke run)
 
