@@ -31,7 +31,8 @@ import time
 import torch
 import torch.nn.functional as F
 
-from env import Cfg, DroneEnv, manhattan, sample_tasks
+import env as env_module
+from env import Cfg, make_env, manhattan, sample_tasks
 from nca import N_CODES, SpaceTimeNCA, cond_channels, draw_codes, make_cond, pick_tubes, uses_battery, uses_codes
 from credit import null_partner_credit
 from prune import credit_batch, prune_batch, verify_labels
@@ -66,7 +67,7 @@ def rollout(logits, s, r, g, cfg, M=1, eps=None, temp=1.0, greedy=None, gen=None
     n = N * M
     arn = torch.arange(n)
     env_cfg = Cfg(H=cfg.H, W=cfg.W, T=cfg.T, B=10 ** 6) if kinematic else cfg
-    env = DroneEnv(s[tid], r[tid], g[tid] if g is not None else None, env_cfg)
+    env = make_env(s[tid], r[tid], g[tid] if g is not None else None, env_cfg)
     if eps is None:
         eps = torch.zeros(n)
     if greedy is None:
@@ -260,7 +261,7 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
     model.eval()
     s, r, g = tasks
     n = s.shape[0]
-    env = DroneEnv(s, r, g, cfg)
+    env = make_env(s, r, g, cfg)
     hist = torch.zeros(n, 2, cfg.T + 1, dtype=torch.long)
     hist[:, 0, 0] = s[:, 0] * cfg.W + s[:, 1]
     hist[:, 1, 0] = r[:, 0] * cfg.W + r[:, 1]
@@ -386,9 +387,11 @@ def main():
     ap.add_argument("--resume", default="")
     ap.add_argument("--battery", type=int, default=0, help="1: the seeker's battery level, as the simulator reports it, is an input map (phase 2, step 1)")
     ap.add_argument("--codes", type=int, default=0, help="1: each drone draws a one-hot code per episode and reads its tube through it (phase 2, step 2)")
+    ap.add_argument("--sim", default="old", choices=("old", "wf"), help="wf: the task is played in the new simulator wf/sim.py (phase 2, step 4)")
     args = ap.parse_args()
     if (args.battery or args.codes) and not args.strict:
         raise SystemExit("--battery 1 and --codes 1 are implemented for the audited path only (--strict 1)")
+    env_module.BACKEND = args.sim
 
     cfg = Cfg(T=args.T, B=args.B)
     if args.threads > 0:

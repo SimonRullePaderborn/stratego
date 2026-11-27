@@ -120,12 +120,25 @@ class DroneEnv:
         return succ.float()
 
 
+BACKEND = "old"     # "wf": the same task is played in the new simulator, wf/sim.py (phase 2, step 4; --sim wf)
+
+
+def make_env(s, r, g, cfg):
+    """The simulator for a batch of tasks: DroneEnv above, or its equal on wf/sim.py (wf/task8.py)."""
+    if BACKEND == "wf":
+        from wf.task8 import SimEnv
+        return SimEnv(s, r, g, cfg)
+    if BACKEND != "old":
+        raise ValueError(BACKEND)
+    return DroneEnv(s, r, g, cfg)
+
+
 def replay(s, r, g, acts, cfg):
     """Replay recorded joint actions [n, T, 2] against target g.  Returns (success, tau).
 
     This is the reference for hindsight relabelling: a rollout counts as a
     rewarded episode for target g exactly if this function says so."""
-    env = DroneEnv(s, r, g, cfg)
+    env = make_env(s, r, g, cfg)
     for t in range(acts.shape[1]):
         env.step(acts[:, t, 0], acts[:, t, 1])
     return env.success.clone(), env.tau.clone()

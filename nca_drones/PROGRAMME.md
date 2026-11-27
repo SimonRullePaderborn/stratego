@@ -1322,12 +1322,16 @@ invalidates the runs built on it.
 | 1 | The seeker's battery level becomes an input | The final system shows the battery (decided) | The old 8x8 code |
 | 2 | Codes: each drone draws a one-hot code per episode and reads its tube through it, instead of one tube channel per drone type | Five capturers share a kind | The old 8x8 code |
 | 3 | The rule is widened to the design's size: 32 state channels, 128 hidden units | Capacity for sixteen codes and ten drones | The old 8x8 code (`--C 32 --hid 128`) |
-| 4 | The same recipe in the new simulator and the new learner files (`wf/`, section 12.3), with lattice, search, credit and noise switched to behave as in step 3 | Everything later needs `wf/`; the port must lose nothing | `wf/`, on a GPU |
-| 5 | Search in closed loop: every clone advances its own lattice, regrown at each step | A target that moves cannot be met by a plan grown once | `wf/` |
-| 6 | The state is kept and bounded: a few iterations per step instead of regrowing. Back-propagation runs through the last 16 to 32 iterations at the start of a leg and over more than two steps | The cost at 24x24, and the iteration gate | `wf/` |
-| 7 | The window slides: 3 past and 16 future slices instead of one lattice for the whole episode | Episodes longer than the lattice | `wf/` |
-| 8 | Exploration noise independent per drone instead of shared; three runs of the old code with `--shared 0.0` give the old recipe's figure and spread | The design holds shared noise back (O14) | `wf/` |
-| 9 | Strand run: one to five seekers, one recharger, a common target that stays after a capture; credit over drone orders, clipped at zero | The gate on separate strands (O12) | `wf/` |
+| 4 | The task is played in the new simulator (`wf/sim.py`), behind an adapter with the old simulator's interface (`wf/task8.py`, `--sim wf`). This step is checked exactly, not statistically: the two simulators agree in every field after every step, and the trainer writes the same log with either | Everything later needs the new simulator; the swap must change nothing | The old trainer on `wf/sim.py` |
+| 5 | The trainer runs on a GPU | Closed-loop search needs thousands of lattices at once | The old trainer with a device switch |
+| 6 | Search in closed loop: every clone advances its own lattice, regrown at each step | A target that moves cannot be met by a plan grown once | The trainer of step 5, changed in place |
+| 7 | The state is kept and bounded: a few iterations per step instead of regrowing. Back-propagation runs through the last 16 to 32 iterations at the start of a leg and over more than two steps | The cost at 24x24, and the iteration gate | As step 6 |
+| 8 | The window slides: 3 past and 16 future slices instead of one lattice for the whole episode | Episodes longer than the lattice | As step 6 |
+| 9 | Exploration noise independent per drone instead of shared; three runs of the old code with `--shared 0.0` give the old recipe's figure and spread | The design holds shared noise back (O14) | As step 6 |
+| 10 | Strand run: one to five seekers, one recharger, a common target that stays after a capture; credit over drone orders, clipped at zero | The gate on separate strands (O12) | As step 6 |
+
+From step 4 on the trainer is changed in place, one step at a time, and its parts move into the files that
+section 12.3 names as they are rewritten. Section 12.3 describes where the chain ends, not a separate rewrite.
 
 Not in the chain; each can be measured as one run against the step it would change: storing improvements only
 (the measured recipe stores the greedy rule's captures too and replays stored rollouts; dropping both risks that
@@ -1336,17 +1340,17 @@ worlds, which does the same as the old search while nothing is hidden and enters
 
 The strand run uses placements in which every seeker needs a recharge and all drones can gather within one
 battery life, the filter of the earlier probe (`probe_seekers` in `probe_extensions.py`). The same tasks are
-also given to the checkpoint of step 8, which never saw more than one seeker; that number is reported beside
+also given to the checkpoint of step 9, which never saw more than one seeker; that number is reported beside
 the gate, as the comparison with the 34% of the old rule.
 
 ### 12.5 Gates of phase 2
 
-* The last step with one seeker (step 8, the new core) reaches at least 75% on the never-posed tasks, as the
+* The last step with one seeker (step 9, the new core) reaches at least 75% on the never-posed tasks, as the
   mean over three seeds. It has no shared noise, so the fair comparison in the old recipe is 65.5%, and 75%
-  asks for the level that the old recipe needed shared noise for. If step 8 is not kept, the question whether
+  asks for the level that the old recipe needed shared noise for. If step 9 is not kept, the question whether
   shared noise stays is the PI's (O14).
-* The iteration gate (section 14.1), measured on every step from step 6 on.
-* The strand gate, in the form that O12 decides, measured on the strand run (step 9).
+* The iteration gate (section 14.1), measured on every step from step 7 on.
+* The strand gate, in the form that O12 decides, measured on the strand run (step 10).
 * **Kill criterion:** no version with a kept state passes the iteration gate. Then the question of how a kept
   state can be made stable goes back to design before anything is scaled up.
 

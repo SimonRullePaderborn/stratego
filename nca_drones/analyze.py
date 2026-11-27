@@ -11,7 +11,8 @@ import json
 
 import torch
 
-from env import Cfg, DroneEnv, manhattan, sample_tasks
+import env as env_module
+from env import Cfg, make_env, manhattan, sample_tasks
 from nca import N_CODES, SpaceTimeNCA, cond_channels, make_cond, uses_battery, uses_codes
 from train import evaluate, evaluate_closed, grow, rollout, task_key
 
@@ -24,6 +25,7 @@ def load(path):
                          update=a["update"], fire_rate=a.get("fire_rate", 1.0))
     model.load_state_dict(ck["model"])
     model.eval()
+    env_module.BACKEND = a.get("sim", "old")          # evaluate in the simulator the run was trained in
     load.posed = ck.get("posed")          # tasks posed to the learner up to this checkpoint (None for old runs)
     return model, Cfg(T=a["T"], B=a["B"]), a, ck.get("round", -1)
 
@@ -80,7 +82,7 @@ def lesions(model, tasks, cfg, K, amp):
     logits = grow(model, s, r, g, cfg, K, amp)
     base = rollout(logits, s, r, g, cfg, M=1)
     # (a) the recharger ignores its tube and hovers at its start
-    env = DroneEnv(s, r, g, cfg)
+    env = make_env(s, r, g, cfg)
     for t in range(cfg.T):
         c = env.cand(env.ps)
         a_s = logits[torch.arange(n)[:, None], 0, t + 1, c[..., 0], c[..., 1]].argmax(1)
@@ -118,7 +120,7 @@ def battery_probe(model, tasks, cfg, K, amp):
     with torch.autocast("cpu", dtype=torch.bfloat16, enabled=bool(amp)):
         logits, state = model(cond, K)
     logits, state = logits.float(), state.float()
-    env = DroneEnv(s, r, g, cfg)
+    env = make_env(s, r, g, cfg)
     X, Y, Tm = [], [], []
     for t in range(cfg.T):
         acts = []
