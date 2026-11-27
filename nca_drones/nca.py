@@ -27,6 +27,12 @@ def voxel_norm(s, eps=1e-3):
     return (s - mu) / (var + eps).sqrt()
 
 
+def bound(s):
+    """Divide each voxel's state vector by max(1, its root-mean-square over channels): a state inside the unit
+    ball is left alone, a larger one is brought back to it (design version 2, section 5; phase 2, step 7)."""
+    return s / s.pow(2).mean(1, keepdim=True).sqrt().clamp(min=1.0)
+
+
 class SpaceTimeNCA(nn.Module):
     def __init__(self, C=16, hid=64, n_cond=3, n_out=2, update="res", fire_rate=1.0):
         super().__init__()
@@ -59,6 +65,12 @@ class SpaceTimeNCA(nn.Module):
             z = torch.sigmoid(zc[:, : self.C] - 1.0)
             c = torch.tanh(zc[:, self.C:])
             new = (1 - z) * s + z * c
+        elif self.update == "bound":
+            # the state enters the rule as it is and is bounded after the update, instead of being normalised on the way in
+            x = torch.cat([s, cond], 1)
+            h = F.relu(self.perc(x))
+            h = F.relu(self.mid(h))
+            new = bound(s + self.out(h).float())
         else:
             x = torch.cat([voxel_norm(s), cond], 1)
             h = F.relu(self.perc(x))

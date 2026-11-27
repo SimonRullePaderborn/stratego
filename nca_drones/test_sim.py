@@ -307,3 +307,28 @@ def test_closed_loop_search():
 
 if __name__ == "__main__":
     test_closed_loop_search()
+
+
+def test_bound():
+    """Phase 2, step 7: a state inside the unit ball is left alone, a larger one is scaled onto it, and the bounded
+    rule keeps every voxel there however long it is iterated."""
+    from nca import SpaceTimeNCA, bound
+    s = torch.zeros(1, 4, 1, 1, 2)
+    s[0, :, 0, 0, 0] = torch.tensor([0.5, -0.5, 0.5, -0.5])          # root-mean-square 0.5
+    s[0, :, 0, 0, 1] = torch.tensor([3.0, -4.0, 0.0, 0.0])           # root-mean-square 2.5
+    b = bound(s)
+    assert bool((b[0, :, 0, 0, 0] == s[0, :, 0, 0, 0]).all()), "a small state is unchanged"
+    assert torch.allclose(b[0, :, 0, 0, 1], torch.tensor([1.2, -1.6, 0.0, 0.0])), "a large state is divided by its root-mean-square"
+    torch.manual_seed(0)
+    model = SpaceTimeNCA(C=16, hid=32, n_cond=3, n_out=2, update="bound")
+    torch.nn.init.normal_(model.out.weight, std=0.5)                # large updates, so that the bound is reached
+    cond = torch.randn(2, 3, 5, 4, 4)
+    with torch.no_grad():
+        _, state = model(cond, 60)
+    rms = state.pow(2).mean(1).sqrt()
+    assert float(rms.max()) <= 1.0 + 1e-5 and float(rms.max()) > 0.99, "after 60 iterations the largest voxel sits on the bound"
+    print(f"bound: small states unchanged, large ones scaled to 1; after 60 iterations the largest root-mean-square is {float(rms.max()):.4f}")
+
+
+if __name__ == "__main__":
+    test_bound()

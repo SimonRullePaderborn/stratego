@@ -212,19 +212,24 @@ if __name__ == "__main__":
             kc = ko = n = 0
             per_c, per_o = [], []
             dist_c = {}
+            bits = []                                   # success task by task, for paired comparisons
             for seed in range(2001, 2011):
                 t = fresh_tasks(200, cfg, seed)
                 o = evaluate_closed(model, t, cfg, K, use_amp)
                 o2 = evaluate(model, t, cfg, K, use_amp)
+                bits.append(o["success"])
                 kc += int(o["success"].sum()); ko += int(o2["success"].sum()); n += 200
                 per_c.append(int(o["success"].sum())); per_o.append(int(o2["success"].sum()))
                 dsr = manhattan(t[0], t[1])
                 for d_ in dsr.unique().tolist():
                     a_, b_ = dist_c.get(d_, (0, 0))
                     dist_c[d_] = (a_ + int(o["success"][dsr == d_].sum()), b_ + int((dsr == d_).sum()))
-            tc = int(evaluate_closed(model, test, cfg, K, use_amp)["success"].sum())
+            tcs = evaluate_closed(model, test, cfg, K, use_amp)["success"]
+            tc = int(tcs.sum())
             to = int(evaluate(model, test, cfg, K, use_amp)["success"].sum())
+            as_text = lambda b: "".join("1" if x else "0" for x in b.tolist())
             out[prec] = dict(
+                new2000_closed_per_task=as_text(torch.cat(bits)), test200_closed_per_task=as_text(tcs),
                 new2000_closed=dict(k=kc, n=n, rate=kc / n, ci95=[round(x, 4) for x in wilson(kc, n)], per_seed=per_c),
                 new2000_open=dict(k=ko, n=n, rate=ko / n, ci95=[round(x, 4) for x in wilson(ko, n)], per_seed=per_o),
                 test200_closed=dict(k=tc, n=200, rate=tc / 200, ci95=[round(x, 4) for x in wilson(tc, 200)]),
