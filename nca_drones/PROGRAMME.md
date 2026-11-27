@@ -337,6 +337,7 @@ ends, the evaluation-set generator with its certificates, the other map families
 | Cluster access | The project lives in git on the Mac; the cluster is reached over ssh from there. All code and all git go through the Mac: the cluster runs no git and never contacts GitHub, it receives the files of a commit from the Mac, and results come back to the Mac, where they are committed and pushed to GitHub (27 November) |
 | Search and training | Accepted as proposed: search from saved simulator states (cuts, trunks that continue from kept clones, replays with a drone acting at random or with its sensing withheld); exploration noise held over several steps; legs scored by 0.97 to the power of steps to capture; a training mixture of grid sides 12, 16, 24 and team sizes |
 | Battery input | Each drone's battery level is an input to the learner. This is the sole exception to the contract |
+| Order of phase 2 (27 November) | Phase 2 is built up from the measured recipe one change at a time, and every change is measured against the step before (section 12.4). Its first steps run before the benchmark of phase 1 is frozen: they use the old 8x8 task and none of the benchmark's values. The restart drill of phase 0 is dropped |
 
 ### 6.2 Open
 
@@ -1082,13 +1083,15 @@ rule and the bootstrap. From here on the benchmark changes only by decision O10.
 
 ## 12. Phase 2: the core on 8x8
 
-**Goal.** Show that the new lattice loses nothing on the task that was measured. About 20 runs plus six runs
-of the old code. Budget: 25 to 95 GPU-hours.
+**Goal.** Show that the new lattice loses nothing on the task that was measured, by building it up from the
+measured recipe one change at a time, each change measured against the step before (the PI's decision of 27
+November; the chain is in section 12.4). Budget: at most the 25 to 95 GPU-hours planned before.
 
 ### 12.1 First the old recipe, unchanged, on the cluster
 
-Six runs on CPUs: seeds 0, 1 and 2, each with shared noise (`--shared 0.5`, the stored run `v10`) and without
-(`--shared 0.0`, the stored run `v11_noshared`). The stored runs were started with 1,500 rounds, which sets
+Step 0 of the chain: three runs on CPUs, seeds 0, 1 and 2, with shared noise (`--shared 0.5`, the stored run
+`v10`). The three runs without shared noise (`--shared 0.0`, the stored run `v11_noshared`) follow at the step
+that removes shared noise. The stored runs were started with 1,500 rounds, which sets
 the learning-rate schedule, and were evaluated once with the `best.pt` that existed when round 900 was
 reached (`EVAL_PROTOCOL.md`). The job does the same:
 
@@ -1117,8 +1120,10 @@ cp runs/$name/log.jsonl results/p2a/$name.log.jsonl
 cp runs/$name/best_r900.pt results/p2a/$name.best_r900.pt
 ```
 
-The script is committed as `cluster/jobs/p2a_old_recipe.sh`, the run folder `~/wf/runs/p2a` is filled from the
-Mac by the commands of section 9.2, and each of the six jobs is submitted like this one:
+The script is committed as `cluster/jobs/p2_old_recipe.sh` (it writes into `results/p2/` and takes further
+`train.py` arguments, which steps 1 to 3 use). The run folder is filled from the Mac by the commands of section
+9.2. On a cluster with a scheduler a job is submitted like this one; on the cluster of 27 November each run is a
+Docker container, as the card of the step says:
 
 ```
 ssh h100 'cd ~/wf/logs && sbatch --job-name=p2a_shared_s0 --partition=<cpu partition> --cpus-per-task=2 --mem=8G --time=05:00:00 --output=%x-%j.out ~/wf/runs/p2a/nca_drones/cluster/jobs/p2a_old_recipe.sh p2a_shared_s0 0 0.5'
@@ -1296,38 +1301,54 @@ of the world are stated in them. It is part of the test suite.
 **An end-to-end smoke test:** three rounds on 8x8 on a CPU run without error, write a status file and a
 checkpoint, and continue from the checkpoint.
 
-### 12.4 The runs
+### 12.4 The steps
 
-Three seeds each, 900 rounds, a take-off test (section 7.7) before the first full run. The checkpoint is
-chosen on 100 validation tasks every 50 rounds and evaluated once on the test set and on the 2,000
-never-posed tasks.
+Phase 2 is a chain (the PI's decision of 27 November; before it, the plan built the new core with every change
+at once and took one away per arm). Each step changes one thing in the last version that worked. Every step is
+measured by the same protocol: the checkpoint chosen on the 100 validation tasks, evaluated once on the
+200-task test set and on its own 2,000 never-posed tasks, closed loop. Every step has its own card and starts
+with one seed.
 
-| Run | What differs from the new core |
-|---|---|
-| The new core | Nothing: window with kept and bounded state, codes, battery input, improvements only, credit over two orders, no shared noise |
-| Arm 1 | State without the bound |
-| Arm 2 | State reset and regrown with K0 iterations at every step |
-| Arm 3 | One channel per kind instead of codes |
-| Arm 4 | Battery input zeroed, as in the old task |
-| Arm 5 | The greedy rule's captures are stored too |
-| Arm 6 | Credit in the old form: one drone at random, no orders |
-| Strand run (form to be decided, O12) | Trained on tasks with one to five seekers, one recharger and a common target that stays after a capture; the gate of section 14.1 is measured on it |
+**The rule for keeping a step.** With s the standard deviation of the three baseline rates of step 0: a step is
+kept when its closed-loop rate on the 2,000 never-posed tasks is not below that of the step before by more than
+max(2 s, 2 points). Two points is twice the binomial error of one such rate. A step that falls further is
+analysed on trajectories before anything is built on it; two more seeds are run where a result is too close to
+call. Runs of successive steps may overlap in time, but each is judged in order, and a step that is not kept
+invalidates the runs built on it.
 
-One change per run: an arm never differs from the new core in more than its one switch. The strand run uses
-placements in which every seeker needs a recharge and all drones can gather within one battery life, the
-filter of the earlier probe (`probe_seekers` in `probe_extensions.py`). The same tasks are also given to the
-three checkpoints of the new core, which never saw more than one seeker; that number is reported beside the
-gate, as the comparison with the 34% of the old rule.
+| Step | The one change | Why the goal needs it | Code |
+|---|---|---|---|
+| 0 | None: the measured recipe (the settings of `v10`), seeds 0, 1 and 2 | The baseline and the spread for every later step | The old 8x8 code, on CPUs |
+| 1 | The seeker's battery level becomes an input | The final system shows the battery (decided) | The old 8x8 code |
+| 2 | Codes: each drone draws a one-hot code per episode and reads its tube through it, instead of one tube channel per drone type | Five capturers share a kind | The old 8x8 code |
+| 3 | The rule is widened to the design's size: 32 state channels, 128 hidden units | Capacity for sixteen codes and ten drones | The old 8x8 code (`--C 32 --hid 128`) |
+| 4 | The same recipe in the new simulator and the new learner files (`wf/`, section 12.3), with lattice, search, credit and noise switched to behave as in step 3 | Everything later needs `wf/`; the port must lose nothing | `wf/`, on a GPU |
+| 5 | Search in closed loop: every clone advances its own lattice, regrown at each step | A target that moves cannot be met by a plan grown once | `wf/` |
+| 6 | The state is kept and bounded: a few iterations per step instead of regrowing. Back-propagation runs through the last 16 to 32 iterations at the start of a leg and over more than two steps | The cost at 24x24, and the iteration gate | `wf/` |
+| 7 | The window slides: 3 past and 16 future slices instead of one lattice for the whole episode | Episodes longer than the lattice | `wf/` |
+| 8 | Exploration noise independent per drone instead of shared; three runs of the old code with `--shared 0.0` give the old recipe's figure and spread | The design holds shared noise back (O14) | `wf/` |
+| 9 | Strand run: one to five seekers, one recharger, a common target that stays after a capture; credit over drone orders, clipped at zero | The gate on separate strands (O12) | `wf/` |
+
+Not in the chain; each can be measured as one run against the step it would change: storing improvements only
+(the measured recipe stores the greedy rule's captures too and replays stored rollouts; dropping both risks that
+solved tasks are forgotten, so the chain keeps them); the state without its bound; search staged over several
+worlds, which does the same as the old search while nothing is hidden and enters in phase 4.
+
+The strand run uses placements in which every seeker needs a recharge and all drones can gather within one
+battery life, the filter of the earlier probe (`probe_seekers` in `probe_extensions.py`). The same tasks are
+also given to the checkpoint of step 8, which never saw more than one seeker; that number is reported beside
+the gate, as the comparison with the 34% of the old rule.
 
 ### 12.5 Gates of phase 2
 
-* The new core reaches at least 75% on the never-posed tasks, as the mean over three seeds. It has no shared
-  noise, so the fair comparison in the old recipe is 65.5%, and 75% asks for the level that the old recipe
-  needed shared noise for.
-* The iteration gate (section 14.1), measured on the three checkpoints of the new core.
-* The strand gate, in the form that O12 decides, measured on the strand run of section 12.4.
-* **Kill criterion:** no arm passes the iteration gate. Then the question of how a kept state can be made
-  stable goes back to design before anything is scaled up.
+* The last step with one seeker (step 8, the new core) reaches at least 75% on the never-posed tasks, as the
+  mean over three seeds. It has no shared noise, so the fair comparison in the old recipe is 65.5%, and 75%
+  asks for the level that the old recipe needed shared noise for. If step 8 is not kept, the question whether
+  shared noise stays is the PI's (O14).
+* The iteration gate (section 14.1), measured on every step from step 6 on.
+* The strand gate, in the form that O12 decides, measured on the strand run (step 9).
+* **Kill criterion:** no version with a kept state passes the iteration gate. Then the question of how a kept
+  state can be made stable goes back to design before anything is scaled up.
 
 ## 13. Phases 3 to 6
 
@@ -1339,7 +1360,7 @@ section 7.7 is added to the learner to get past a gate. GPU-hours are estimates 
 |---|---|---|---|---|
 | 0 Arrival | Replace every estimate | Throughput measured; stored checkpoint reproduced | none | under 5 |
 | 1 Benchmark | A frozen benchmark with shown properties, no learner | The table of section 11.9; parameters, seeds and hashes committed | none | about 10 |
-| 2 Core on 8x8 | The new lattice loses nothing on the measured task | Section 12.5 | about 20, and 6 of the old code | 25 to 95 |
+| 2 Core on 8x8 | The new lattice loses nothing on the measured task, built up one change at a time | Section 12.5 | one per step of section 12.4; three for the baseline and for the last step | at most 25 to 95 |
 | 3 Pursuit | Coordinated capture of a visible fleeing target on 12x12 | At least 60% with three capturers | about 12 | 70 to 300 |
 | 4 Hidden target | Scouting through the value of information, 16x16 | Hidden reaches three quarters of visible | about 9 | 140 to 560 |
 | 5 Full scenario | 24x24, ten drones, from scratch | At least 80% on validation | 3 | 105 to 420 |
@@ -1618,6 +1639,11 @@ improvements per million clone-steps.
     commits, and commit and push its results. By the PI's rule of 27 November all code and all git go through
     the Mac: the cluster runs no git, the Mac sends the files of a commit over ssh, and results come back to
     the Mac (sections 4.3 and 9.2).
+23. **Phase 2 is a chain of single changes.** The design page builds the new core with all changes and compares
+    arms against it. By the PI's decision of 27 November, section 12.4 starts from the measured recipe and adds
+    one change per step, each measured against the step before. The measured recipe's stored greedy captures
+    and replayed rollouts stay; "improvements only" is no longer part of the core. Credit is clipped at zero,
+    and back-propagation covers more than two steps once the state is kept.
 
 ## 19. History: the 8x8 result
 
