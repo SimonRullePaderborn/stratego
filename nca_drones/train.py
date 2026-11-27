@@ -144,6 +144,9 @@ def rollout_closed(model, s, r, g, cfg, K, amp=False, M=1, eps=None, temp=1.0, g
     An episode that is over keeps its last volume.  Exploration (eps, temp, greedy, ez, shared) is that of
     rollout, and so is the returned dict.  With M = 1 and no exploration this is the closed-loop readout.
 
+    With model.kept (phase 2, step 8) the volume is grown once, with K iterations on the first observation, and its
+    state is then kept: after every step the new observation is burned in and the rule runs model.ks iterations.
+
     codes [N, 2]: one code per drone and task for a model with codes; the M episodes of a task share them."""
     assert (codes is not None) == uses_codes(model), "codes are given exactly when the model uses them"
     N = s.shape[0]
@@ -172,6 +175,8 @@ def rollout_closed(model, s, r, g, cfg, K, amp=False, M=1, eps=None, temp=1.0, g
     bhist = torch.zeros(n, cfg.T + 1, dtype=torch.long)       # the battery levels the simulator reported
     bhist[:, 0] = env.bat
     vol = torch.zeros(n, 2, cfg.T + 1, cfg.H, cfg.W)          # each episode's own two tubes, as last regrown
+    kept = bool(getattr(model, "kept", False))
+    state = torch.zeros(n, model.C, cfg.T + 1, cfg.H, cfg.W, device=dev) if kept else None    # each episode's kept state
     traj_s, traj_r, acts = [env.ps.clone()], [env.pr.clone()], []
     traj_b = [env.bat.clone()]
     logp = torch.zeros(n)
@@ -192,7 +197,12 @@ def rollout_closed(model, s, r, g, cfg, K, amp=False, M=1, eps=None, temp=1.0, g
             cj = cds[j] if cds is not None else None
             cond = make_cond(S[j], R[j], Gt[j], cfg, hist[j], torch.full((len(j),), t), bat=bhist[j], battery=battery, codes=cj).to(dev)
             with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(amp)):
-                lg, _ = model(cond, K)
+                if kept:
+                    lg, sj = model(cond, K if t == 0 else model.ks, s=state[j] if t > 0 else None)
+                else:
+                    lg, _ = model(cond, K)
+            if kept:
+                state[j] = sj.float()
             lg = lg.float().cpu()
             vol[j] = pick_tubes(lg, cj) if cj is not None else lg
         step_acts = []
@@ -375,6 +385,8 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
     codes = eval_codes(model, n)                             # one code per drone for the whole episode
     bhist = torch.zeros(n, cfg.T + 1, dtype=torch.long)      # the battery levels the simulator reported
     bhist[:, 0] = env.bat
+    kept = bool(getattr(model, "kept", False))               # phase 2, step 8: the state is kept, model.ks iterations per step
+    state = torch.zeros(n, model.C, cfg.T + 1, cfg.H, cfg.W, device=dev) if kept else None
     logits = None
     for t in range(cfg.T):
         act = torch.nonzero(~env.done).squeeze(1)
@@ -387,7 +399,12 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
                 cj = codes[j] if codes is not None else None
                 cond = make_cond(s[j], r[j], g[j], cfg, hist[j], torch.full((len(j),), t), bat=bhist[j], battery=battery, codes=cj).to(dev)
                 with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(amp)):
-                    lg, _ = model(cond, K)
+                    if kept:
+                        lg, sj = model(cond, K if t == 0 else model.ks, s=state[j] if t > 0 else None)
+                    else:
+                        lg, _ = model(cond, K)
+                if kept:
+                    state[j] = sj.float()
                 lg = lg.float().cpu()
                 logits[j] = pick_tubes(lg, cj) if cj is not None else lg
         acts = []
@@ -401,6 +418,35 @@ def evaluate_closed(model, tasks, cfg, K, amp=False, stride=1, bs=256):
         bhist[:, t + 1] = env.bat
     model.train()
     return dict(success=env.success.clone(), tau=env.tau.clone(), n_recharge=env.n_recharge.clone(), hist=hist)
+
+
+def replay_kept(model, s, r, g, cfg, lab, bat, tp, codes, K0, ks, grad_its, amp):
+    """The volume a kept lattice holds after the realised past of a stored rollout (phase 2, step 8).
+
+    lab [n, 2, T+1] and bat [n, T+1] are the rollout's cells and battery levels; tp [n] says how many of its steps
+    are history.  As in closed loop, the rule runs K0 iterations on the first observation and then ks iterations
+    after each of the tp steps.  A sample with a shorter past begins later, so that all end together, and gradient
+    flows through the last grad_its iterations of every sample.  Returns the logits [n, n_out, T+1, H, W]."""
+    dev = next(model.parameters()).device
+    n = s.shape[0]
+    need = K0 + tp * ks                                   # [n] iterations of each sample
+    total = int(need.max())
+    begin = total - need                                  # the iteration at which a sample starts from the zero state
+    battery = uses_battery(model)
+    S = torch.zeros(n, model.C, cfg.T + 1, cfg.H, cfg.W, device=dev)
+    cond, shown = None, None
+    for i in range(total):
+        behind = i - begin                                # [n] iterations a sample has behind it; negative: not begun
+        t0 = torch.where(behind < K0, torch.zeros_like(tp), 1 + torch.div(behind - K0, ks, rounding_mode="floor"))
+        if shown is None or bool((t0 != shown).any()):    # a new observation is burned in at the start of every step
+            cond = make_cond(s, r, g, cfg, lab, t0, bat=bat, battery=battery, codes=codes).to(dev)
+            shown = t0
+        live = (behind >= 0).to(dev)[:, None, None, None, None]
+        with torch.set_grad_enabled(i >= total - grad_its):
+            with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(amp)):
+                S = torch.where(live, model.step(S, cond).float(), S)
+    with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(amp)):
+        return model.readout(S)
 
 
 class Buffer:
@@ -499,9 +545,15 @@ def main():
     ap.add_argument("--stop_round", type=int, default=-1, help="stop once this round is logged; the learning-rate schedule still spans --rounds (EVAL_PROTOCOL.md: 900)")
     ap.add_argument("--closed_search", type=int, default=0, help="1: every search episode regrows its own volume at every step (phase 2, step 6)")
     ap.add_argument("--search_bs", type=int, default=2048, help="episodes per call of the rule in closed-loop search")
+    ap.add_argument("--kept", type=int, default=0, help="1: in closed loop the state is kept from step to step instead of regrown (phase 2, step 8)")
+    ap.add_argument("--ks", type=int, default=4, help="iterations of the rule after each step when the state is kept")
+    ap.add_argument("--ks_jitter", type=int, default=2, help="in learning, --ks is redrawn per batch within plus or minus this")
+    ap.add_argument("--grad_its", type=int, default=32, help="with --kept 1, back-propagation runs through this many final iterations")
     args = ap.parse_args()
     if (args.battery or args.codes or args.closed_search) and not args.strict:
         raise SystemExit("--battery 1, --codes 1 and --closed_search 1 are implemented for the audited path only (--strict 1)")
+    if args.kept and not args.closed_search:
+        raise SystemExit("--kept 1 keeps the state in closed loop and needs --closed_search 1")
     env_module.BACKEND = args.sim
 
     cfg = Cfg(T=args.T, B=args.B)
@@ -523,6 +575,7 @@ def main():
     dev = torch.device(args.device)
     model = SpaceTimeNCA(C=args.C, hid=args.hid, n_cond=cond_channels(bool(args.battery), bool(args.codes)),
                          n_out=N_CODES if args.codes else 2, update=args.update, fire_rate=args.fire_rate).to(dev)
+    model.kept, model.ks = bool(args.kept), args.ks
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     start_round = 0
     if args.resume:
@@ -723,16 +776,24 @@ def main():
                     cond = make_cond(bs_, br_, bg_, cfg, blab, tp, bat=bbat, battery=bool(args.battery), codes=codes_b)
                     bw = bw * (torch.arange(cfg.T + 1)[None, None] > tp[:, None, None]).float()
                 else:
+                    tp = torch.zeros(args.bs, dtype=torch.long)
                     cond = make_cond(bs_, br_, bg_, cfg, battery=bool(args.battery), codes=codes_b)
                 K = args.K + int(torch.randint(-args.K_jitter, args.K_jitter + 1, (1,), generator=gen))
                 taps = (K - args.taps,) if args.taps > 0 else ()
                 cond, lab_d, w_d = cond.to(dev), blab.to(dev), bw.to(dev)
-                with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(args.amp)):
-                    res = model(cond, K, taps=taps)
                 own = (lambda lg: pick_tubes(lg, codes_b)) if args.codes else (lambda lg: lg)   # each drone's own tube
-                loss = tube_loss(own(res[0]), lab_d, cfg, w_d)
-                for tl in (res[2] if taps else ()):
-                    loss = loss + 0.3 * tube_loss(own(tl), lab_d, cfg, w_d)
+                if args.kept:
+                    # the state is rebuilt as closed loop builds it: K iterations on the first observation, then a few
+                    # after each step of the realised past; the number per step is redrawn for every batch
+                    ks_b = args.ks + (int(torch.randint(-args.ks_jitter, args.ks_jitter + 1, (1,), generator=gen)) if args.ks_jitter > 0 else 0)
+                    lg_k = replay_kept(model, bs_, br_, bg_, cfg, blab, bbat, tp, codes_b, K, max(ks_b, 1), args.grad_its, args.amp)
+                    loss = tube_loss(own(lg_k), lab_d, cfg, w_d)
+                else:
+                    with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=bool(args.amp)):
+                        res = model(cond, K, taps=taps)
+                    loss = tube_loss(own(res[0]), lab_d, cfg, w_d)
+                    for tl in (res[2] if taps else ()):
+                        loss = loss + 0.3 * tube_loss(own(tl), lab_d, cfg, w_d)
                 opt.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)

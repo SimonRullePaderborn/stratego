@@ -39,6 +39,9 @@ class SpaceTimeNCA(nn.Module):
         self.C, self.hid, self.n_cond, self.n_out = C, hid, n_cond, n_out
         self.update = update
         self.fire_rate = fire_rate
+        # Phase 2, step 8 (set by the trainer and by analyze.load, not learned): in closed loop the state is kept
+        # from step to step and the rule runs `ks` iterations after each new observation, instead of regrowing.
+        self.kept, self.ks = False, 4
         self.perc = nn.Conv3d(C + n_cond, hid, 3, padding=1)
         self.mid = nn.Conv3d(hid, hid, 1)
         if update == "gru":

@@ -26,6 +26,7 @@ def load(path, device="cpu"):
     model.load_state_dict(ck["model"])
     model.eval()
     model.to(device)
+    model.kept, model.ks = bool(a.get("kept", 0)), int(a.get("ks", 4))      # phase 2, step 8
     env_module.BACKEND = a.get("sim", "old")          # evaluate in the simulator the run was trained in
     load.posed = ck.get("posed")          # tasks posed to the learner up to this checkpoint (None for old runs)
     return model, Cfg(T=a["T"], B=a["B"]), a, ck.get("round", -1)
@@ -185,12 +186,14 @@ if __name__ == "__main__":
     ap.add_argument("--K", type=int, default=0)
     ap.add_argument("--out", default="")
     ap.add_argument("--device", default="cpu", help="where the rule runs; give the device the run was trained on (phase 2, step 5)")
+    ap.add_argument("--mult", type=int, default=1, help="iteration gate: every iteration count (K, and ks of a kept state) times this")
     args = ap.parse_args()
     model, cfg, a, rnd = load(args.ckpt, args.device)
     if args.full and (uses_codes(model) or args.device != "cpu"):
         raise SystemExit("--full (lesions, probes, tube diagnostics) is written for CPU models without codes; use --prereg")
-    K, amp = args.K or a["K"], bool(a.get("amp", 0))
-    res = dict(ckpt=args.ckpt, round=rnd, K=K)
+    K, amp = (args.K or a["K"]) * args.mult, bool(a.get("amp", 0))
+    model.ks = model.ks * args.mult
+    res = dict(ckpt=args.ckpt, round=rnd, K=K, ks=model.ks if model.kept else None, mult=args.mult)
 
     # the held-out test set: 200 recharge-needed tasks, seed 12345, never trained on, never used for model selection
     test = sample_tasks(200, cfg, torch.Generator().manual_seed(12345), "need")

@@ -332,3 +332,43 @@ def test_bound():
 
 if __name__ == "__main__":
     test_bound()
+
+
+def test_kept_state():
+    """Phase 2, step 8: learning rebuilds the kept state exactly as closed loop builds it, and a greedy kept rollout
+    is the kept closed-loop readout."""
+    from nca import N_CODES, SpaceTimeNCA, cond_channels, make_cond, pick_tubes
+    from train import eval_codes, evaluate_closed, replay_kept, rollout_closed
+    cfg = Cfg()
+    torch.manual_seed(0)
+    model = SpaceTimeNCA(C=16, hid=32, n_cond=cond_channels(True, True), n_out=N_CODES, update="bound")
+    torch.nn.init.normal_(model.out.weight, std=0.05)
+    model.kept, model.ks = True, 3
+    gen = torch.Generator().manual_seed(2)
+    n, K0, ks = 6, 7, 3
+    s, r, g = sample_tasks(n, cfg, gen)
+    codes = eval_codes(model, n)
+    one = rollout_closed(model, s, r, g, cfg, K=K0, codes=codes)                 # greedy, kept: gives realised pasts
+    ref = evaluate_closed(model, (s, r, g), cfg, K=K0)
+    assert bool((one["success"] == ref["success"]).all()) and bool((one["tau"] == ref["tau"]).all()), "kept rollout = kept readout"
+    lab = torch.stack([one["traj_s"][..., 0] * cfg.W + one["traj_s"][..., 1], one["traj_r"][..., 0] * cfg.W + one["traj_r"][..., 1]], 1)
+    bat = one["bat"]
+    tp = torch.minimum(torch.tensor([0, 1, 2, 3, 4, 2]), (one["tau"] - 1).clamp(min=0))   # pasts of different lengths
+    with torch.no_grad():
+        got = replay_kept(model, s, r, g, cfg, lab, bat, tp, codes, K0, ks, grad_its=0, amp=False)
+        for b in range(n):                                # the same state, built one sample and one step at a time
+            sb, rb, gb, cb = s[b:b + 1], r[b:b + 1], g[b:b + 1], codes[b:b + 1]
+            state = None
+            for t in range(int(tp[b]) + 1):
+                cond = make_cond(sb, rb, gb, cfg, lab[b:b + 1], torch.tensor([t]), bat=bat[b:b + 1], battery=True, codes=cb)
+                lg, state = model(cond, K0 if t == 0 else ks, s=state)
+            assert torch.allclose(got[b], lg[0], atol=1e-5), f"sample {b}: replay differs from stepping, past of {int(tp[b])} steps"
+    # gradient reaches the weights through the last iterations
+    out = replay_kept(model, s, r, g, cfg, lab, bat, tp, codes, K0, ks, grad_its=4, amp=False)
+    pick_tubes(out, codes).sum().backward()
+    assert model.perc.weight.grad is not None and float(model.perc.weight.grad.abs().sum()) > 0
+    print(f"kept state: learning's replay equals step-by-step growth for pasts of {tp.tolist()} steps; a greedy kept rollout equals the kept readout")
+
+
+if __name__ == "__main__":
+    test_kept_state()
