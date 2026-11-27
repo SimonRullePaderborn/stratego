@@ -1,0 +1,1 @@
+old and new simulator agree in every field after every step: 4 sets of 4000 episodes of 20 steps (3818 empty batteries in the random set; 1430 captures and 876 episodes with a recharge in the scripted set)

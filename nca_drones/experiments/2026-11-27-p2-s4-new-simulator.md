@@ -28,9 +28,19 @@
 
 ## After the run
 
-* **Result:**
-* **Trajectories looked at:**
-* **Supported, refuted or inconclusive:**
-* **What was learned:**
+Run on 27 November 2026 from commit `edbf630`, sent to `~/wf/runs/p2s4` and checked file by file (103 of 103).
+
+* **Result:** (a) `python3 -m wf.test_task8` passed on its first execution: the two simulators agree in every field
+  after every step on 4 sets of 4,000 episodes of 20 steps; the random set holds 3,818 empty batteries, the scripted
+  set 1,430 captures and 876 episodes with a recharge (`results/p2/p2s4_test_task8.out`). (b) Two runs of 8 rounds
+  with seed 0, the flags of step 3 and 8 threads, one with `--sim old` and one with `--sim wf`, wrote logs that are
+  identical in all 22 compared fields for all 8 rounds, clock fields aside (`results/p2/p2s4_eq_old.log.jsonl`,
+  `p2s4_eq_wf.log.jsonl`, `p2s4_same_logs.out`). Before both: `test_sim.py` exit 0, and the new simulator's own 17
+  tests passed.
+* **Trajectories looked at:** not applicable
+* **Supported, refuted or inconclusive:** supported, exactly: no field of any compared episode or round differs.
+* **What was learned:** `wf/sim.py` plays the 8x8 task exactly as the old simulator does, so `--sim wf` changes no
+  result and needs no training run of its own. Every later step runs on the new simulator. This verdict does not
+  depend on steps 1 to 3, which were still training when it was reached.
 * **Next step, and the card it becomes:** step 5, the trainer on a GPU
-* **Actual GPU-hours:**
+* **Actual GPU-hours:** 0 (a few minutes on 8 CPU cores)
