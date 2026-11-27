@@ -3,8 +3,9 @@
 This file is the hand-off for anyone, person or assistant session, who continues the work. It is kept current:
 when a decision is taken or a phase ends, this file changes in the same commit.
 
-Status on 27 November 2026: kickoff done, design version 2 written, nothing of it built or run. The H100 cluster is
-not connected yet.
+Status on 27 November 2026: kickoff done, design version 2 written. The simulator, a first map generator and
+their tests are written in `wf/` and have never been executed. The H100 cluster is not connected yet, so nothing
+has been run.
 
 ## 1. The rule that overrides everything
 
@@ -39,23 +40,24 @@ arrows; not a mere forecaster; the steering command comes from the voxels.
 | Target | As fast as a drone; flees from any drone it can see; wanders otherwise |
 | Capture | Exact: a capturer lands on the target's cell or crosses it. A capture radius stays a setting, at zero |
 | Information | One shared lattice (free, instant communication); the map is known in advance; the target is known only inside a sensor footprint |
-| Cluster access | The project lives in git on the Mac; the cluster is reached over ssh from there |
+| Cluster access | The project lives in git on the Mac; the cluster is reached over ssh from there. The Mac folder is to be linked to the assistant's session through the desktop app (Remote Control) |
+| Empty battery | A drone with an empty battery cannot fly, and flies again once a recharger on its cell has refilled it |
+| Search and training | Accepted: search from saved simulator states (cuts, trunks continuing from kept clones, replays with a drone at random or with its sensing withheld); exploration noise held over several steps; legs scored by 0.97 to the power of steps to capture; a training mixture of grid sides 12 / 16 / 24 and team sizes |
 
 ## 4. Waiting for the PI
 
 The full list with options, defaults and reasons is section 15 of the design page. The ones that block work:
 
-1. Cluster facts: ssh alias, scheduler, number of H100s and for how long, working directory, whether the cluster
+1. The Mac folder added in the Claude desktop app (Settings, Claude Code, Remote Control), and the cluster
+   facts: ssh alias, scheduler, number of H100s and for how long, working directory, whether the cluster
    reaches GitHub and PyPI. `cluster/probe.sh` answers most of this in one run.
-2. Benchmark-side tools (connectivity check, shortest-path detour measure, scripted reference team), never
+2. Benchmark-side tools (connectivity check, shortest-path detour measure, two scripted reference teams), never
    imported by the learner: allowed?
-3. Search from saved simulator states (cuts, trunks continuing from kept clones, replays with one drone at
-   random or with its sensing withheld): inside "search only"?
-4. Training mixture over grid sides 12 / 16 / 24 and sub-teams: allowed?
-5. The bar: lower 95% bound at 80% over five training seeds, or a point estimate?
-6. Empty battery: drone removed (proposal) or immobile and revivable?
-7. Recharge certificate: target farther than twice each capturer's initial charge (proposal)?
-8. The target's flee rule in detail, and whether it sees through obstacles (proposal: yes).
+3. What an empty drone can still do: proposal, it cannot sense or capture and the target ignores it.
+4. The bar: lower 95% bound at 80% over five training seeds, or a point estimate?
+5. Recharge certificate: target farther than twice each capturer's initial charge (proposal)?
+6. The target's flee rule in detail, and whether it sees through obstacles (proposal: yes).
+7. Dead ends removed in evaluation maps only; an uncaptured training target moves after 48 steps (proposals).
 
 Nothing that depends on one of these is built before it is decided. Benchmark rows are needed before phase 1,
 search and training rows before phase 2 (last column of the table in section 15 of the design page).
@@ -68,6 +70,7 @@ search and training rows before phase 2 (last column of the table in section 15 
 | Design version 1 (superseded) | `docs/unified_wavefront_design.html`; published copy https://claude.ai/artifact/FECZfdW6MjZgEE5TNPsQoz |
 | Measured 8x8 baseline | `README.md`, `EVAL_PROTOCOL.md`, `results/` |
 | Cluster kit, not yet executed anywhere | `cluster/probe.sh`, `cluster/bench_rule.py` |
+| Simulator, map generator and their tests, not yet executed anywhere | `wf/sim.py`, `wf/maps.py`, `wf/test_sim.py` (run with `cd nca_drones && python3 -m wf.test_sim`) |
 | Experiment cards | `experiments/`, one file per experiment, from `experiments/TEMPLATE.md` |
 
 ## 6. First session on the cluster (phase 0)
