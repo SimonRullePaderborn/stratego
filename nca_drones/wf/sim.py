@@ -207,7 +207,7 @@ def step(cfg, st, actions, respawn=False):
     B, N = st.kind.shape
     dev = st.pos.device
     ar = torch.arange(B, device=dev)
-    if int(st.t.max()) >= st.tnoise.shape[1]:
+    if bool((st.t >= st.tnoise.shape[1]).any()):
         raise RuntimeError("episode longer than cfg.T + 1 steps")
     pw = powered(cfg, st)
     real = st.exists & ~st.ghost

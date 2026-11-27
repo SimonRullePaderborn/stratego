@@ -11,6 +11,7 @@ Its guarantees hold by construction, without any check:
 * no obstacle covers a road cell.
 
 Not guaranteed: how far a free cell lies from the nearest road. That is measured per family in phase 1.
+On 12x12 the roads leave room for fewer obstacles than `obstacle_share` asks for, so small maps are more open.
 
 Further families (city blocks with alleys, braided mazes) need connectivity checks and wait for the PI's
 decision on benchmark-side tools.

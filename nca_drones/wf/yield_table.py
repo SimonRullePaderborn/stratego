@@ -8,6 +8,10 @@ this. The table says whether reward is reachable at all before training, per gri
 
 Target sight 2 is the PI's target. Sight 1 and 0 are reference rows that show how steep the cliff is; they
 are measurements of the environment, not training settings.
+
+The three sight rows of one grid size and team share their maps, start cells, first target cell, tie-breaks
+and exploration noise. They are paired on purpose: differences between them are less noisy than the
+intervals of the single rows suggest.
 """
 import argparse
 import json
@@ -38,7 +42,7 @@ def run_cell(batch, side, sight, steps, seed, device):
     cfg = sim.Cfg(H=side, W=side, target_sight=sight, T=steps)
     st = sim.draw_target(cfg, sim.reset(cfg, *batch, seed=seed + 1))
     B, N = st.kind.shape
-    gen = torch.Generator(device=device).manual_seed(seed + 2)
+    gen = torch.Generator().manual_seed(seed + 2)             # on the CPU: the same noise on every device
     strategy = explore.draw_strategies(B, N, gen, device)
     flat = torch.zeros(B, N, 5, device=device)               # the scores of an untrained rule
     done = torch.zeros(B, dtype=torch.bool, device=device)
@@ -63,7 +67,8 @@ def run_cell(batch, side, sight, steps, seed, device):
         "side": side, "sight": sight, "episodes": B, "steps": steps,
         "captured": k, "rate": k / B, "wilson95": [lo, hi],
         "mean_step_of_capture": float(when[done].float().mean()) if k else None,
-        "drones_in_sight_at_capture": {str(n): int((in_sight[done] == n).sum()) for n in range(0, 6)},
+        "drones_in_sight_at_capture": {str(n): int((in_sight[done] == n).sum()) for n in range(N + 1)},
+        "episodes_captured_with_fewer_than_two_in_sight": (done & (in_sight < 2)).nonzero()[:50, 0].tolist(),
         "target_was_sensed_before_capture": int(seen_before[done].sum()),
         "capturers_with_power_at_the_end": float((capturers & sim.powered(cfg, st)).sum() / capturers.sum().clamp(min=1)),
     }

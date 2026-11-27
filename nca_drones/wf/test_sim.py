@@ -9,7 +9,7 @@ from dataclasses import replace
 
 import torch
 
-from . import maps, sim
+from . import explore, maps, sim
 from .sim import CAPTURER, OBSERVER, RECHARGER
 
 STAY, NORTH, SOUTH, WEST, EAST = 0, 1, 2, 3, 4
@@ -221,7 +221,7 @@ def test_ghost_is_ignored():
 def test_rectangular_grid():
     cfg = sim.Cfg(H=4, W=7)
     st = world(cfg, [(CAPTURER, (3, 6), 5), (CAPTURER, (0, 0), 5)])
-    assert int(st.seen.sum()) == 20                                    # two corner footprints of 4 + 3 + 2 + 1 cells
+    assert st.seen.shape == (1, 4, 7) and int(st.seen.sum()) == 20     # two corner footprints of 4 + 3 + 2 + 1 cells
     st, _ = sim.step(cfg, st, act(SOUTH, NORTH))
     st, _ = sim.step(cfg, st, act(EAST, WEST))
     assert cells(st) == [[3, 6], [0, 0]]                               # nobody leaves the map
@@ -231,16 +231,61 @@ def test_rectangular_grid():
     assert sim.draw_target(cfg, st).tpos[0].tolist() == [3, 6]         # the last free cell in reading order
 
 
+def fails(fn):
+    try:
+        fn()
+    except RuntimeError:
+        return True
+    return False
+
+
 def test_tables_do_not_run_out_silently():
     cfg = sim.Cfg(H=6, W=6, T=2)                                       # the world covers steps 0, 1 and 2
     st = world(cfg, [(CAPTURER, (0, 0), 9)])
     for _ in range(3):
         st, _ = sim.step(cfg, st, act(STAY))
-    try:
-        sim.step(cfg, st, act(STAY))
-    except RuntimeError:
-        return
-    raise AssertionError("a step beyond the world's tables must fail")
+    assert fails(lambda: sim.step(cfg, st, act(STAY)))
+    one = sim.Cfg(H=6, W=6, max_spawns=1)                              # a world with a single target
+    drawn = sim.draw_target(one, world(one, [(CAPTURER, (0, 0), 9)]))
+    assert fails(lambda: sim.draw_target(one, replace(drawn, tactive=torch.zeros(1, dtype=torch.bool))))
+
+
+def test_settings_for_an_empty_drone():
+    """The three proposals that are not decided yet, each switched the other way."""
+    cfg = sim.Cfg(H=8, W=8)
+    empty = [(CAPTURER, (4, 3), 0)]
+    can_capture = replace(cfg, empty_captures=True)
+    st = prefer(world(can_capture, empty, target=(4, 4)), WEST)
+    st, captured = sim.step(can_capture, st, act(STAY))
+    assert captured[0]                                                 # the target walks onto it and is caught
+    is_seen = replace(cfg, empty_is_seen=True)
+    st = prefer(world(is_seen, empty, target=(4, 4)), WEST)
+    st, _ = sim.step(is_seen, st, act(STAY))
+    assert st.tpos[0].tolist() == [3, 4]                               # it steps away: north is the first of three equals
+    assert int(world(sim.Cfg(H=12, W=12, empty_senses=True), [(CAPTURER, (6, 6), 0)]).seen.sum()) == 25
+
+
+def test_a_recharger_does_not_refill_itself():
+    cfg = sim.Cfg(H=6, W=6, capacity=(12, 3, 24))                      # a recharger with a battery, for this test only
+    st = world(cfg, [(RECHARGER, (5, 0), 1)], roads=[(5, x) for x in range(6)])
+    st, _ = sim.step(cfg, st, act(STAY))
+    assert st.battery[0, 0] == 0
+
+
+def test_exploration_noise():
+    gen = torch.Generator().manual_seed(8)
+    scores = torch.randn(4, 3, 5, generator=torch.Generator().manual_seed(9))
+    greedy = explore.draw_strategies(4, 3, gen, "cpu", greedy=torch.ones(4, dtype=torch.bool))
+    action, after = explore.choose(greedy, scores, gen)
+    assert torch.equal(action, scores.argmax(-1)) and int(after.left.sum()) == 0     # greedy: best score, no excursion
+
+    always = explore.draw_strategies(64, 3, gen, "cpu", rate=(1.0, 1.0), hold=(3, 3))
+    assert (always.hold == 3).all()
+    flat = torch.zeros(64, 3, 5)
+    first, s1 = explore.choose(always, flat, gen)                      # every drone starts an excursion of 1 to 3 steps
+    assert (s1.left >= 0).all() and (s1.left <= 2).all() and torch.equal(first, s1.held)
+    second, _ = explore.choose(s1, flat, gen)
+    assert (second[s1.left > 0] == first[s1.left > 0]).all()           # a running excursion repeats its action
 
 
 def test_branch_shares_worlds_and_steps_are_repeatable():

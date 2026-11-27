@@ -7,6 +7,9 @@ its five options and divided by the temperature. Noise is independent between dr
 takes the best score and never starts an excursion.
 
 The rule never sees any of this: it only changes which action is taken.
+
+Random numbers are drawn on the generator's own device and then moved, so a generator on the CPU gives the
+same noise whether the scores live on a CPU or on a GPU, and a run can be replayed on either.
 """
 import math
 from dataclasses import dataclass, replace
@@ -24,9 +27,13 @@ class Strategy:
     held: torch.Tensor      # [B,N] long: the action of the running excursion
 
 
+def _rand(shape, gen, device):
+    return torch.rand(*shape, generator=gen, device=gen.device).to(device)
+
+
 def draw_strategies(B, N, gen, device, greedy=None, tau=(0.25, 2.0), rate=(0.0, 0.3), hold=(1, 4)):
-    """One strategy per clone. `gen` is a torch.Generator on `device`. `greedy`: [B] bool; default: none is."""
-    u = torch.rand(B, 3, generator=gen, device=device)
+    """One strategy per clone. `greedy`: [B] bool; default: none is."""
+    u = _rand((B, 3), gen, device)
     t = torch.exp(math.log(tau[0]) + u[:, 0] * (math.log(tau[1]) - math.log(tau[0])))       # log-uniform
     r = rate[0] + u[:, 1] * (rate[1] - rate[0])
     span = hold[1] - hold[0]
@@ -37,15 +44,14 @@ def draw_strategies(B, N, gen, device, greedy=None, tau=(0.25, 2.0), rate=(0.0, 
 
 
 def choose(strategy, scores, gen):
-    """Actions [B,N] for scores [B,N,5], and the strategy with its excursions advanced by one step.
-    `gen` is a torch.Generator on the device of `scores`."""
+    """Actions [B,N] for scores [B,N,5], and the strategy with its excursions advanced by one step."""
     B, N, A = scores.shape
     dev = scores.device
     z = (scores - scores.mean(-1, keepdim=True)) / (scores.std(-1, keepdim=True) + 1e-6)
-    u = torch.rand(B, N, A, generator=gen, device=dev).clamp(1e-9, 1 - 1e-7)
+    u = _rand((B, N, A), gen, dev).clamp(1e-9, 1 - 1e-7)
     sampled = (z / strategy.tau[:, None, None] - torch.log(-torch.log(u))).argmax(-1)       # Gumbel-max sampling
 
-    v = torch.rand(B, N, 3, generator=gen, device=dev)
+    v = _rand((B, N, 3), gen, dev)
     longest = strategy.hold[:, None].expand(B, N)
     start = (strategy.left == 0) & (v[..., 0] < strategy.rate[:, None]) & ~strategy.greedy[:, None]
     left = torch.where(start, torch.minimum(1 + (v[..., 1] * longest).long(), longest), strategy.left)
