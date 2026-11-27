@@ -1,0 +1,880 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>Wavefront Design v2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one reading column (68ch); tables, code and figures break out to the full 1040px wrapper. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --ink:#161a22; --ink-2:#55606f; --line:#dce1e8; --line-2:#b8c0cc;
+  --accent:#2a52be; --accent-soft:#e7ecfa; --code:#eceff4; --tile:#eceff4;
+  --a:#257de0; --b:#f47230; --c:#00b894;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1116; --surface:#161a21; --ink:#e6e9ef; --ink-2:#98a2b3; --line:#262c36; --line-2:#3b4452;
+    --accent:#8fb0ff; --accent-soft:#1a2440; --code:#1a1f28; --tile:#1d222b;
+    --a:#338ced; --b:#e76624; --c:#00a888; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1116; --surface:#161a21; --ink:#e6e9ef; --ink-2:#98a2b3; --line:#262c36; --line-2:#3b4452;
+  --accent:#8fb0ff; --accent-soft:#1a2440; --code:#1a1f28; --tile:#1d222b;
+  --a:#338ced; --b:#e76624; --c:#00a888; color-scheme:dark;
+}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.6}
+.wrap{max-width:1040px;margin:0 auto;padding-block:44px 88px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+h1,h2,h3{font-weight:600;line-height:1.2;text-wrap:balance;margin:0}
+h1{font-size:clamp(1.9rem,4.4vw,2.6rem);letter-spacing:-.01em}
+h2{font-size:1.4rem;margin-top:3.4rem;padding-top:1.1rem;border-top:1px solid var(--line-2)}
+h3{font-size:1.02rem;margin-top:1.9rem}
+h2 .sec{font-family:var(--font-mono);font-weight:500;font-size:.95rem;color:var(--ink-2);margin-right:.6rem}
+p,ul,ol{max-width:68ch;margin:.85rem 0}
+ul,ol{padding-left:1.3rem}
+li{margin:.4rem 0}
+a{color:var(--accent)}
+a:focus-visible,.band:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.eyebrow{font-family:var(--font-mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin:0 0 .9rem}
+.lede{font-size:1.14rem;line-height:1.55;margin-top:1.1rem}
+.status{display:flex;gap:14px;align-items:baseline;border:1px solid var(--line-2);background:var(--surface);border-radius:6px;padding:12px 16px;margin:1.6rem 0;max-width:68ch}
+.status .label{font-family:var(--font-mono);font-size:.74rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);flex:none}
+.status p{margin:0;min-width:0}
+.tag{display:inline-block;font-family:var(--font-mono);font-size:.7rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;padding:1px 7px;border-radius:3px;border:1px solid transparent;white-space:nowrap;vertical-align:.08em}
+.tag.m{background:var(--accent-soft);color:var(--accent)}
+.tag.u{color:var(--ink-2);border-color:var(--line-2)}
+.toc{margin-top:1.8rem}
+.toc ol{list-style:none;padding:0;margin:0;max-width:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:2px 28px}
+.toc li{margin:0}
+.toc a{display:flex;gap:.7rem;padding:5px 0;text-decoration:none;color:var(--ink);border-bottom:1px solid var(--line)}
+.toc a span{font-family:var(--font-mono);font-size:.82rem;color:var(--ink-2);flex:none;width:2.2rem}
+.toc a:hover{color:var(--accent)}
+code{font-family:var(--font-mono);font-size:.88em;background:var(--code);padding:1px 5px;border-radius:3px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:6px;padding:16px 18px;margin:1.1rem 0;overflow-x:auto;font-family:var(--font-mono);font-size:13.5px;line-height:1.6;tab-size:4}
+pre .c{color:var(--ink-2)}
+.scroll{overflow-x:auto;margin:1.1rem 0}
+table{border-collapse:collapse;width:100%;font-size:.93rem;line-height:1.45}
+th,td{text-align:left;vertical-align:top;padding:9px 14px 9px 0;border-bottom:1px solid var(--line)}
+th{font-weight:600;border-bottom:1px solid var(--line-2);white-space:nowrap}
+td:first-child{font-weight:500}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;padding-right:22px}
+table.wide{min-width:720px}
+figure{margin:1.6rem 0}
+figure .scroll{margin:0}
+figure svg{display:block;width:100%;height:auto}
+figure .diagram svg{min-width:720px}
+figure svg text{font-family:var(--font-body)}
+figure svg text.mono{font-family:var(--font-mono)}
+figure svg text.num{font-variant-numeric:tabular-nums}
+figcaption{font-size:.9rem;color:var(--ink-2);max-width:68ch;margin-top:.8rem}
+.rules{padding-left:1.4rem}
+.rules li{margin:.75rem 0;padding-left:.2rem}
+.rules em{font-style:normal;font-family:var(--font-mono);font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)}
+.formula{font-family:var(--font-mono);font-size:.92rem;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 16px;margin:1.1rem 0;max-width:68ch;overflow-x:auto;white-space:nowrap}
+.viz{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px 20px 14px;max-width:820px}
+.viz h3{margin:0;font-size:1rem}
+.viz .sub{margin:.25rem 0 .7rem;color:var(--ink-2);font-size:.9rem;max-width:none}
+.legend{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:.86rem;color:var(--ink-2);margin:0 0 .4rem;padding:0;list-style:none;max-width:none}
+.legend li{display:flex;align-items:center;gap:8px;margin:0}
+.key{display:inline-block;width:18px;height:2px;border-radius:1px;flex:none}
+.plot{position:relative;max-width:760px}
+.plot .scroll{margin:0}
+.plot svg{min-width:560px}
+table.narrow{width:auto;min-width:min(100%,460px)}
+.tip{position:absolute;top:0;left:0;pointer-events:none;background:var(--surface);border:1px solid var(--line-2);border-radius:6px;padding:8px 11px;font-size:.8rem;line-height:1.5;box-shadow:0 6px 18px rgba(0,0,0,.14);white-space:nowrap;z-index:2}
+.tip .t{color:var(--ink-2);margin-bottom:2px}
+.tip .r{display:flex;align-items:center;gap:8px}
+.tip .r b{font-weight:600;min-width:3.4em;text-align:right;font-variant-numeric:tabular-nums}
+.tip .r span.n{color:var(--ink-2)}
+.band{cursor:crosshair}
+footer{margin-top:3.4rem;padding-top:1.1rem;border-top:1px solid var(--line-2);color:var(--ink-2);font-size:.88rem}
+footer p{max-width:none}
+@media (max-width:560px){ body{font-size:15.5px} .status{flex-direction:column;gap:4px} pre{font-size:12.5px} }
+@media (prefers-reduced-motion:no-preference){ .hair{transition:opacity .12s} }
+
+.tag.d{background:var(--ink);color:var(--bg)}
+.tag.q{color:var(--ink);border:1px dashed var(--ink-2)}
+td .tag{margin-left:0}
+.phase td:first-child{white-space:nowrap}
+.kv td:first-child{white-space:nowrap}
+.terms{margin-top:1.9rem}
+.terms h3{margin:0 0 .7rem}
+.terms dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 22px;margin:0;font-size:.93rem;line-height:1.45}
+.terms dt{font-weight:600}
+.terms dd{margin:0;max-width:68ch}
+@media (max-width:560px){ .terms dl{grid-template-columns:minmax(0,1fr);gap:0} .terms dd{margin-bottom:.6rem} }
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">Specification, version 2 · space-time cellular automaton for multi-drone pursuit</p>
+  <h1>Unified Wavefront Design</h1>
+  <p class="lede">Version 2 rebuilds the design from first principles for the target the project now has: a 24×24 map with obstacles and roads, ten drones of three kinds, and an evasive target that stays hidden until a sensor finds it. One lattice, one local rule and tubes as the only output that steers remain. Most of what version 1 added around them is removed.</p>
+  <div class="status"><span class="label">Status</span><p>Nothing in this document has been built or run. <span class="tag m">measured</span> rests on the earlier 8×8 experiments. <span class="tag d">decided</span> was fixed by the PI at kickoff. <span class="tag q">needs approval</span> touches what the benchmark means, or departs from "general mechanisms only"; nothing that depends on such an item is built before the PI has decided it (§15). <span class="tag u">estimate</span> is replaced by a cluster measurement before it is used.</p></div>
+  <div class="terms"><h3>Terms</h3><dl>
+    <dt>Lattice</dt><dd>The grid of voxels with axes time, x and y: one slice per time step, one voxel per map cell.</dd>
+    <dt>Rule</dt><dd>The one local update that is applied to every voxel at every iteration.</dd>
+    <dt>Tube</dt><dd>For one drone, the marks in future slices that say where it will be. A tube seen as a path is a strand.</dd>
+    <dt>Front, dream</dt><dd>The present slice; the slices ahead of it, which the rule fills in.</dd>
+    <dt>Clamp</dt><dd>To overwrite the input channels of a slice with what is known. State and output are never written from outside.</dd>
+    <dt>Code</dt><dd>A one-hot vector of length 16 that a drone receives for one episode. It selects that drone's channel.</dd>
+    <dt>Greedy rule</dt><dd>The rule acting without exploration noise.</dd>
+    <dt>Strategy</dt><dd>The greedy rule plus one stream of exploration noise.</dd>
+    <dt>World</dt><dd>A seed for everything the team cannot know: where the target appears and how it breaks ties.</dd>
+    <dt>Clone</dt><dd>One strategy run in one world from a saved state.</dd>
+    <dt>Trunk, cut, leg</dt><dd>A training episode; a saved state just before a target is drawn; the stretch from a cut to the capture of that target or to the leg limit.</dd>
+    <dt>Screen, confirm, harvest</dt><dd>The three stages of search at a cut (§7).</dd>
+    <dt>Ghost drone</dt><dd>A drone with a code, a cell and a tube that the simulator ignores: it cannot sense, capture or be seen. It is used to audit credit.</dd>
+    <dt>Scripted teams</dt><dd>Two hand-written reference teams that exist only on the benchmark side (§3).</dd>
+    <dt>Free cell</dt><dd>Any cell that is not an obstacle. Road cells are free cells.</dd>
+  </dl></div>
+  <nav class="toc" aria-label="Sections"><ol>
+    <li><a href="#changes"><span>§1</span>What changed since version 1</a></li>
+    <li><a href="#forces"><span>§2</span>What the task forces</a></li>
+    <li><a href="#benchmark"><span>§3</span>The benchmark</a></li>
+    <li><a href="#contract"><span>§4</span>The bitter-lesson contract</a></li>
+    <li><a href="#lattice"><span>§5</span>The lattice</a></li>
+    <li><a href="#acting"><span>§6</span>Acting</a></li>
+    <li><a href="#search"><span>§7</span>Search</a></li>
+    <li><a href="#credit"><span>§8</span>Credit</a></li>
+    <li><a href="#learning"><span>§9</span>Learning</a></li>
+    <li><a href="#gates"><span>§10</span>Gates and controls</a></li>
+    <li><a href="#compute"><span>§11</span>Compute</a></li>
+    <li><a href="#priors"><span>§12</span>Priors and removals</a></li>
+    <li><a href="#roadmap"><span>§13</span>Roadmap</a></li>
+    <li><a href="#cluster"><span>§14</span>Working on the cluster</a></li>
+    <li><a href="#decisions"><span>§15</span>Open decisions</a></li>
+  </ol></nav>
+</header>
+
+<h2 id="changes"><span class="sec">§1</span>What changed since version 1</h2>
+<p>Version 1 was written for two drones on an 8×8 grid and then stretched. At the new scale several of its parts fail on cost or on logic, and one input changed by decision.</p>
+<div class="scroll"><table class="wide">
+  <thead><tr><th>Version 1</th><th>Version 2</th><th>Reason</th></tr></thead>
+  <tbody>
+    <tr><td>Drones commit one after another; the rule runs after each</td><td>All drones read their own tube at once</td><td>Ten drones cost 12 passes of the whole lattice per step. Sequential commitment was there to break ties between drones of one type, which is now the job of codes (§5)</td></tr>
+    <tr><td>One tube channel per drone type</td><td>One code per drone; a tube is read by an inner product with that code</td><td>Two seekers placed in one channel both arrived in 34% of cases, each alone in 81.5% <span class="tag m">measured</span>. That rule had never been trained with two seekers, so a rule trained with shared channels is a comparison arm</td></tr>
+    <tr><td>The battery is never shown</td><td>Each drone's battery level is an input</td><td>The one permitted exception <span class="tag d">decided</span></td></tr>
+    <tr><td>Best strategy over a grid of strategies and worlds, kept if it beats the greedy one</td><td>Search inside one leg: screened on shared worlds, kept only if confirmed against the greedy rule on fresh worlds, imitated on a third set</td><td>With 256 strategies and 8 worlds the old test passes by luck most of the time when nothing is better <span class="tag u">estimate</span></td></tr>
+    <tr><td>Recorded action lists of different clones are recombined</td><td>Dropped whenever anything is hidden</td><td>A recorded list carries the hidden information of the world it came from</td></tr>
+    <tr><td>Each drone is lesioned alone in closed-loop lattice runs</td><td>Credit from simulator-only replays over random orders; a rerun per drone with its sensing withheld</td><td>Lesioning one drone at a time gives every capturer nothing when another takes over. The simulator-only form is the one the audited 8×8 run used <span class="tag m">measured</span></td></tr>
+    <tr><td>Episodes are the unit of selection and imitation</td><td>Legs: from the appearance of a target to its capture</td><td>Targets respawn in training, so an episode has no single reward to assign</td></tr>
+    <tr><td>Forecast outputs and a forecast loss</td><td>Off. First thing to add back if scouting does not appear</td><td>Not forced by the task; its training signal is biased towards cells that were visited</td></tr>
+    <tr><td>Window of 6 past and 20 future slices</td><td>3 past and 16 future slices</td><td>Cost: a quarter fewer voxels. The dream still reaches further than one capturer battery</td></tr>
+    <tr><td>State without a bound</td><td>State bounded per voxel</td><td>At twice the trained iterations the two 8×8 checkpoints lost 5 and 18 points; at one and a half times, one lost 8.5 and the other nothing <span class="tag m">measured</span>. The cause is not established. A bound is the hypothesis, tested first <span class="tag u">not yet tested</span></td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="forces"><span class="sec">§2</span>What the task forces</h2>
+<p>Each mechanism in this design answers one requirement that the task imposes on any learner restricted to reward, a simulator, search and learning. A mechanism without such a requirement is not in the design.</p>
+<div class="scroll"><table class="wide">
+  <thead><tr><th>Requirement</th><th>Why it cannot be avoided</th><th>Mechanism</th></tr></thead>
+  <tbody>
+    <tr><td>Reward must occur under an untrained rule</td><td>Imitation has nothing to copy before the first capture. On 8×8 an untrained rule found a rewarded rollout on 1.2% of tasks with independent noise and on 9.1% with shared noise <span class="tag m">measured</span></td><td>Exploration noise that makes drones travel; respawning targets; smaller grids and teams in the training mixture (§7)</td></tr>
+    <tr><td>A tube must say which drone it belongs to</td><td>Five capturers share a kind, and a pincer sends two of them to two different cells</td><td>Codes (§5)</td></tr>
+    <tr><td>Motion that did not matter must not be imitated</td><td>Without credit the recharger learned to stand still <span class="tag m">measured</span>. With ten drones most are irrelevant to any one capture</td><td>Credit (§8)</td></tr>
+    <tr><td>Luck must not be selected</td><td>With a hidden target, the best single rollout is the one that happened to fly towards it</td><td>Shared worlds, confirmation on fresh worlds, imitation on a third set (§7)</td></tr>
+    <tr><td>An informer must be creditable</td><td>An observer never captures, and a replay of recorded actions already contains what it found</td><td>A rerun with that drone's sensing withheld (§8)</td></tr>
+    <tr><td>The plan must persist and survive more computation</td><td>Regrowing the lattice at every step gained 22 points on hard starts and lost 5 on easy ones by flipping between plans <span class="tag m">measured</span>. On 24×24 it would also cost a full growth per step</td><td>A bounded state that is kept and trained on its own long-run states (§5, §9). Regrowing stays a comparison arm</td></tr>
+    <tr><td>Cost per decision must not grow with the team</td><td>Version 1 needs one lattice pass per drone per step</td><td>Simultaneous readout (§6)</td></tr>
+    <tr><td>Information must cross the map faster than drones fly</td><td>A 3×3×3 rule moves information one cell per iteration; routes on a 24×24 map with detours are 50 to 100 cells long</td><td>Iterations at reset and at every step, checked by the reach gate (§10)</td></tr>
+    <tr><td>Training must be cut into units that end in a reward</td><td>Targets respawn, batteries carry over, episodes have no natural end</td><td>Legs (§7)</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="benchmark"><span class="sec">§3</span>The benchmark</h2>
+<p>The benchmark is part of the claim. "80% capture" has no meaning until the definitions below are frozen. Values marked <span class="tag u">estimate</span> are frozen at the end of phase 1 from runs that involve no learner (§13).</p>
+<figure>
+  <div class="scroll diagram"><svg viewBox="0 0 920 392" role="img" aria-label="Excerpt of a map with obstacle blocks and a road network with a loop and a dead end. A capturer flies around an obstacle towards the target. An observer flies straight over an obstacle. A recharger stays on the road. The target stands on a free cell and sees drones within two cells.">
+<defs><marker id="m1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--a)"/></marker><marker id="m1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--b)"/></marker><marker id="m1c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--c)"/></marker></defs>
+<rect x="30" y="34" width="572" height="312" rx="4" style="fill:var(--surface)" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2"/>
+<rect x="30" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="56" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="82" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="108" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="108" y="112" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="108" y="138" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="108" y="164" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="108" y="190" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="108" y="216" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="108" y="242" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="108" y="268" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="108" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="134" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="134" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="160" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="160" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="186" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="186" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="212" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="212" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="238" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="238" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="264" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="264" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="290" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="290" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="316" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="316" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="342" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="342" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="368" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="368" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="394" y="86" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="394" y="112" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="394" y="138" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="394" y="164" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="394" y="190" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="394" y="216" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="394" y="242" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="394" y="268" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="394" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="420" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="446" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="472" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="498" y="190" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="498" y="216" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="498" y="242" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="498" y="268" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="498" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="524" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="550" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<rect x="576" y="294" width="26" height="26" style="fill:var(--tile)"/>
+<line x1="56" y1="34" x2="56" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="82" y1="34" x2="82" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="108" y1="34" x2="108" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="134" y1="34" x2="134" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="160" y1="34" x2="160" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="186" y1="34" x2="186" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="212" y1="34" x2="212" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="238" y1="34" x2="238" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="264" y1="34" x2="264" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="290" y1="34" x2="290" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="316" y1="34" x2="316" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="342" y1="34" x2="342" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="368" y1="34" x2="368" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="394" y1="34" x2="394" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="420" y1="34" x2="420" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="446" y1="34" x2="446" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="472" y1="34" x2="472" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="498" y1="34" x2="498" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="524" y1="34" x2="524" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="550" y1="34" x2="550" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="576" y1="34" x2="576" y2="346" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="60" x2="602" y2="60" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="86" x2="602" y2="86" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="112" x2="602" y2="112" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="138" x2="602" y2="138" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="164" x2="602" y2="164" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="190" x2="602" y2="190" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="216" x2="602" y2="216" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="242" x2="602" y2="242" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="268" x2="602" y2="268" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="294" x2="602" y2="294" stroke="currentColor" stroke-opacity=".09"/>
+<line x1="30" y1="320" x2="602" y2="320" stroke="currentColor" stroke-opacity=".09"/>
+<rect x="162" y="140" width="74" height="74" rx="3" fill="currentColor" opacity=".62"/>
+<rect x="266" y="166" width="74" height="74" rx="3" fill="currentColor" opacity=".62"/>
+<rect x="448" y="62" width="74" height="74" rx="3" fill="currentColor" opacity=".62"/>
+<rect x="32" y="166" width="48" height="74" rx="3" fill="currentColor" opacity=".62"/>
+<rect x="214" y="36" width="100" height="22" rx="3" fill="currentColor" opacity=".62"/>
+<rect x="552" y="192" width="48" height="48" rx="3" fill="currentColor" opacity=".62"/>
+<path d="M355.0 86.0L420.0 151.0L355.0 216.0L290.0 151.0Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 3" opacity=".7"/>
+<polyline points="147.0,255.0 147.0,125.0 288.7,125.0" fill="none" style="stroke:var(--a)" stroke-width="2.4" stroke-linejoin="round" marker-end="url(#m1a)"/>
+<circle cx="147.0" cy="255.0" r="8" style="fill:var(--a);stroke:var(--surface)" stroke-width="2"/>
+<polyline points="381.0,255.0 381.0,216.0" fill="none" style="stroke:var(--a)" stroke-width="2.4" stroke-linejoin="round" marker-end="url(#m1a)"/>
+<circle cx="381.0" cy="255.0" r="8" style="fill:var(--a);stroke:var(--surface)" stroke-width="2"/>
+<polyline points="303.0,281.0 303.0,140.6" fill="none" style="stroke:var(--c)" stroke-width="2.4" stroke-linejoin="round" stroke-dasharray="5 4" marker-end="url(#m1c)"/>
+<path d="M303.0 272.0L312.0 288.0L294.0 288.0Z" style="fill:var(--c);stroke:var(--surface)" stroke-width="2"/>
+<polyline points="407.0,281.0 407.0,216.0" fill="none" style="stroke:var(--b)" stroke-width="2.4" stroke-linejoin="round" marker-end="url(#m1b)"/>
+<rect x="399.5" y="273.5" width="15" height="15" rx="2" style="fill:var(--b);stroke:var(--surface)" stroke-width="2"/>
+<path d="M355.0 143.0L363.0 151.0L355.0 159.0L347.0 151.0Z" style="fill:var(--surface)" stroke="currentColor" stroke-width="2"/>
+<circle cx="645" cy="46" r="7.5" style="fill:var(--a)"/>
+<text x="664" y="45" font-size="12.5" font-weight="600" fill="currentColor">Capturer</text>
+<text x="664" y="60" font-size="11.5" fill="currentColor" opacity=".78">every cell but obstacles; battery; captures</text>
+<path d="M645 69L653.5 83.5L636.5 83.5Z" style="fill:var(--c)"/>
+<text x="664" y="76" font-size="12.5" font-weight="600" fill="currentColor">Observer</text>
+<text x="664" y="91" font-size="11.5" fill="currentColor" opacity=".78">every cell, obstacles too; battery; sees far</text>
+<rect x="638" y="101" width="14" height="14" rx="2" style="fill:var(--b)"/>
+<text x="664" y="107" font-size="12.5" font-weight="600" fill="currentColor">Recharger</text>
+<text x="664" y="122" font-size="11.5" fill="currentColor" opacity=".78">roads only; no battery limit; refills</text>
+<path d="M645 131L653 139L645 147L637 139Z" style="fill:var(--surface)" stroke="currentColor" stroke-width="1.8"/>
+<text x="664" y="138" font-size="12.5" font-weight="600" fill="currentColor">Target</text>
+<text x="664" y="153" font-size="11.5" fill="currentColor" opacity=".78">every cell but obstacles; flees drones it sees</text>
+<rect x="637" y="174" width="16" height="16" rx="3" fill="currentColor" opacity=".62"/>
+<text x="664" y="186" font-size="12.5" font-weight="600" fill="currentColor">Obstacle</text>
+<rect x="637" y="205" width="16" height="16" style="fill:var(--tile)" stroke="currentColor" stroke-opacity=".3"/>
+<text x="664" y="217" font-size="12.5" font-weight="600" fill="currentColor">Road</text>
+<path d="M645 236L653 244L645 252L637 244Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="3 2.5" opacity=".8"/>
+<text x="664" y="243" font-size="12.5" font-weight="600" fill="currentColor">What the target sees</text>
+<text x="664" y="258" font-size="11.5" fill="currentColor" opacity=".78">two cells, any drone kind</text>
+</svg></div>
+  <figcaption>Who may go where, on an excerpt of a map. A capturer has to fly around an obstacle; the observer flies straight over one. The recharger cannot leave the road, so every refill happens on a road cell. The target moves like a capturer and starts to flee once any drone is within two cells.</figcaption>
+</figure>
+<div class="scroll"><table class="wide">
+  <thead><tr><th>Kind</th><th>Number in the hardest scenario</th><th>May enter</th><th>Battery</th><th>Senses</th><th>Can</th></tr></thead>
+  <tbody>
+    <tr><td>Capturer</td><td>5 <span class="tag d">decided</span></td><td>Free cells <span class="tag d">decided</span></td><td>Limited <span class="tag d">decided</span>; 12 steps <span class="tag u">estimate</span></td><td>3 cells <span class="tag u">estimate</span></td><td>Capture</td></tr>
+    <tr><td>Observer</td><td>2 <span class="tag d">decided</span></td><td>Every cell, obstacles included <span class="tag d">decided</span></td><td>Limited <span class="tag d">decided</span>; 24 steps <span class="tag u">estimate</span></td><td>5 cells <span class="tag u">estimate</span></td><td>Nothing else</td></tr>
+    <tr><td>Recharger</td><td>3 <span class="tag d">decided</span></td><td>Road cells only <span class="tag d">decided</span></td><td>Unlimited <span class="tag d">decided</span></td><td>2 cells <span class="tag u">estimate</span></td><td>Refill every drone on its cell</td></tr>
+    <tr><td>Target</td><td>1 at a time</td><td>Free cells <span class="tag d">decided</span></td><td>None</td><td>Drones within 2 cells <span class="tag u">estimate</span></td><td>Flee</td></tr>
+  </tbody>
+</table></div>
+<h3>Rules</h3>
+<ul>
+  <li><strong>Moves.</strong> Stay, north, south, west, east. Everyone moves one cell per step <span class="tag d">decided</span>. A move into a cell the kind may not enter becomes a stay.</li>
+  <li><strong>Order within a step.</strong> (1) Drones and target choose from the same state. (2) All move at once. (3) Capture is tested. (4) Every battery loses one unit, hovering included; a drone on a recharger's cell is then refilled; a drone at zero is then removed for the rest of the episode <span class="tag q">needs approval</span>. A capture on the last unit counts, and a drone that arrives on a recharger's cell with its last unit survives. (5) Sensing. (6) In training, a new target is drawn if there is none.</li>
+  <li><strong>Capture.</strong> A capturer and the target are on the same cell after the move, or they exchanged cells during it <span class="tag d">decided</span>. A capture radius exists as a setting and is zero <span class="tag d">decided</span>. An evaluation episode ends at the capture.</li>
+  <li><strong>Target.</strong> It flees from any drone it can see and wanders otherwise <span class="tag d">decided</span>. Proposed details <span class="tag q">needs approval</span>: it sees every drone, of any kind, within two cells, through obstacles. If it sees none, it stays or steps to a free neighbour, at random. Otherwise it takes the option, staying included, that maximises its distance to the nearest drone it sees, measured to where the drones stood before the move, ties at random.</li>
+  <li><strong>Information.</strong> All drones feed one lattice. The map is known. The target is known only inside some drone's sensing radius <span class="tag d">decided</span>. A sensed cell reports "target here" or "sensed, empty". All distances are Manhattan distances, and no drone's sensing is blocked by obstacles <span class="tag q">needs approval</span>.</li>
+  <li><strong>Reward.</strong> One per capture. Nothing else.</li>
+</ul>
+<p>Sensing radii are chosen so that a capturer sees the target one cell before the target sees it, and an observer can shadow it from three to five cells away without making it flee. That is what gives scouting a value.</p>
+<h3>Maps</h3>
+<p>Roads are laid first: junctions on a jittered coarse lattice, joined by one-cell-wide segments; a spanning tree is kept and a share of the remaining segments is added back to make loops; dead-end spurs are attached. Obstacles fill part of the space between roads. Three generator families are used in training (city blocks with alleys, scattered walls, braided mazes). A fourth family and twenty hand-drawn maps are never trained on. Every map must have connected free space, connected roads, and a road within four steps of every free cell <span class="tag u">estimate</span>.</p>
+<p>In evaluation maps, a free cell with fewer than two free neighbours is turned into an obstacle, repeatedly until none is left, so that a dead end cannot do the capturing. Where such a cell is a road cell, a neighbouring obstacle is opened instead and the road stays. Training maps are left as generated <span class="tag q">needs approval</span>.</p>
+<h3>Training and evaluation</h3>
+<ul>
+  <li><strong>Training.</strong> After a capture the next target appears on a random free cell with no drone on it. There is never more than one <span class="tag d">decided</span>. Batteries and removed drones carry over until the episode is reset after 96 steps <span class="tag u">estimate</span>. A target that is not captured within 48 steps moves to a new random cell <span class="tag q">needs approval</span>. Maps, grid sides of 12, 16 and 24, and teams of 1 to 5 capturers, 0 to 3 rechargers and 0 to 2 observers are drawn uniformly, without stages <span class="tag q">needs approval</span>. Drones start on random cells their kind may enter, with battery levels drawn uniformly between 2 units and full.</li>
+  <li><strong>Headline evaluation.</strong> A 24×24 map never seen in training, with the full team of ten. Half of the episodes start with the team gathered within two cells of one road cell and with full batteries; half start as in training, spread out and with random battery levels. One target stands farther from every capturer than twice that capturer's initial charge, and for the capturer nearest to it the way around the obstacles is at least four cells longer than the straight distance. The episode lasts 128 steps <span class="tag u">estimate</span>. The rule acts greedily: one lattice, no noise, no search. Success is a capture.</li>
+</ul>
+<h3>What the benchmark must guarantee, and how each property is certified</h3>
+<div class="scroll"><table class="wide">
+  <thead><tr><th>Property</th><th>Certificate, computed outside the learner</th><th>Control, run on every reported model</th></tr></thead>
+  <tbody>
+    <tr><td>A recharge is required</td><td>For every capturer, the target starts more than twice that capturer's initial charge away. A capturer that is not refilled acts for as many steps as its charge, and the gap closes by at most two cells per step. This is arithmetic on Manhattan distance, as in the 8×8 task, and it holds for any start layout</td><td>Rechargers removed, or left in the team with refills switched off: exactly 0. Rechargers frozen where they start: at most 5%</td></tr>
+    <tr><td>Obstacles must be flown around</td><td>For the capturer nearest to the target, the obstacle-respecting distance exceeds the Manhattan distance by 4 or more. Needs a shortest-path computation in the generator <span class="tag q">needs approval</span></td><td>Obstacle channel zeroed in the rule's input: at most half the headline rate</td></tr>
+    <tr><td>Coordination is required</td><td>With a sight of two cells, a lone drone next to the target always leaves it a safe option, so no single drone can capture where every free cell has two free neighbours. Hand proof; to be confirmed by enumeration on small grids</td><td>One capturer alone: exactly 0</td></tr>
+    <tr><td>Capture is possible</td><td>A scripted team that always sees the target captures in at least 1 of 16 attempts on the instance, and in at least 90% of attempts over the whole set. A hand-written heuristic, used only to admit instances <span class="tag q">needs approval</span></td><td>The script's rate is published as a reference. Our rate is also reported on the unfiltered set, with the share of instances that were rejected</td></tr>
+    <tr><td>Scouting has value</td><td>A second scripted team, which acts on what the team has sensed instead of on the true position, loses at least 10 points when the observers' sensing is withheld. Otherwise the radii are recalibrated before any training <span class="tag q">needs approval</span></td><td>Observers removed; observers flying with their sensing withheld</td></tr>
+  </tbody>
+</table></div>
+<p>Controls that apply to a team are first run with the scripted teams, to show that the benchmark has the property, and later with every model that is reported. The benchmark is frozen at the end of phase 1. If a control later fails to behave as stated, the learner is never adjusted to pass it. A change of environment values then needs the PI's approval and becomes a new pre-registered version on which earlier results are reported again.</p>
+<h3>Pre-registration</h3>
+<p>Before the first training run on a benchmark version, the following go into git: the parameter file, the generator version, the seed blocks, the control thresholds, and hashes of the validation and test sets. Test: 500 new maps with 4 episodes each. Validation: 200 maps with 2 episodes each. One checkpoint per training seed, chosen on validation, is evaluated once on the test set. Intervals come from a bootstrap that resamples training seeds first and maps second.</p>
+<p><strong>The bar</strong> <span class="tag q">needs approval</span>. Proposed: the lower end of the 95% interval is at least 80% for the mean over five training seeds, each trained from scratch, on the 2,000 test episodes from new maps of the training families, with the greedy readout. The held-out map family and the hand-drawn maps are reported beside it against a secondary bar of 60%. Phase 5 uses the point estimate on validation as a development gate; only phase 6 tests the bar.</p>
+
+
+<h2 id="contract"><span class="sec">§4</span>The bitter-lesson contract</h2>
+<p>Sutton's bitter lesson says that methods which scale with computation, namely search and learning, end up ahead of methods that build in what their designers know. Version 1 turned that into five rules. Version 2 keeps them with one exception, one addition and one rule that had to be loosened.</p>
+<ol class="rules">
+  <li><strong>No domain concept in the learner.</strong> Distance, meeting, escort, pincer, sweep, low battery, sighting and role are not named anywhere in it. <em>Check</em> a text search of the learner's source. <em>Exception</em> each drone's battery level is an input <span class="tag d">decided</span>.</li>
+  <li><strong>Every ability comes from search or learning,</strong> and has a compute dial (§11).</li>
+  <li><strong>More compute never hurts.</strong> More iterations, a longer window or more clones must not lower success. <em>Check</em> §10. One of the two 8×8 checkpoints fails this today <span class="tag m">measured</span>.</li>
+  <li><strong>No shaped reward, no demonstration, no staged curriculum, no solution heuristic.</strong> Tasks are drawn from one declared distribution. Selection uses the return and nothing else. <em>Loosened</em> version 1 also excluded every exploration prior and every curriculum. Version 2 admits two things that wording excluded, and lists both for approval: exploration noise held over several steps, and a training mixture over grid sizes and team sizes (§12, §15).</li>
+  <li><strong>Every prior that remains is written down</strong> with the test that could remove it (§12).</li>
+  <li><strong>The benchmark may know what the learner may not</strong> <span class="tag q">needs approval</span>. Shortest paths, connectivity checks and the scripted teams exist only in the generator and the evaluator. Nothing they compute reaches the learner as an input, as a filter on training tasks or as a training signal. The learner's code imports none of theirs.</li>
+</ol>
+<p>What the learner is told about a drone: its cell, its kind as one of three fixed labels, its battery level, and a code that changes every episode. The kind label is inherited from the 8×8 design, where each type had its own channel. What a kind can do is learned.</p>
+<p>What the learner takes from the simulator. For acting: the next observation, the reward, and the cell an action leads to. For search and credit, in training only <span class="tag q">needs approval</span>: saving and restoring a state, drawing what is hidden afresh, replaying a leg with some drones acting at random, and running a leg with one drone's sensing withheld.</p>
+
+
+<h2 id="lattice"><span class="sec">§5</span>The lattice</h2>
+<p>The lattice has time as one of its three axes. It holds a window of slices around the present: 3 behind it, the present, and 16 ahead. Slices behind hold facts. Slices ahead hold the dream, in which each drone has a tube that marks where it will be. The present is the front between the two.</p>
+<figure>
+  <div class="scroll diagram"><svg viewBox="0 0 920 216" role="img" aria-label="Eleven time slices in a row. The four slices behind the present hold facts: a capturer and a recharger approaching each other and a fixed target. The present slice is the front. The six slices ahead hold the dream: the two tubes merge at t+1 and reach the target at t+3, and the target is shown as a forecast.">
+<defs><marker id="f1arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+<text x="46" y="15" font-size="12.5" fill="currentColor">time: at every step the window moves one slice to the right</text>
+<line x1="46" y1="27" x2="870" y2="27" stroke="currentColor" stroke-width="1.2" opacity=".65" marker-end="url(#f1arr)"/>
+<path d="M46 72V64H338V72" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+<text x="192.0" y="56" font-size="12.5" text-anchor="middle" fill="currentColor">facts: clamped</text>
+<path d="M426 72V64H870V72" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+<text x="648.0" y="56" font-size="12.5" text-anchor="middle" fill="currentColor">dream: grown by the rule</text>
+<text x="382.0" y="56" font-size="12.5" font-weight="600" text-anchor="middle" style="fill:var(--accent)">front</text>
+<path d="M377.0 63L387.0 63L382.0 72Z" style="fill:var(--accent)"/>
+<rect x="46" y="86" width="64" height="64" rx="4" style="fill:var(--tile)" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/>
+<line x1="62.0" y1="89" x2="62.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="49" y1="102.0" x2="107" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="78.0" y1="89" x2="78.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="49" y1="118.0" x2="107" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="94.0" y1="89" x2="94.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="49" y1="134.0" x2="107" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M102.0 87.0L109.0 94.0L102.0 101.0L95.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+<circle cx="54.0" cy="142.0" r="6.5" style="fill:var(--a);stroke:var(--surface)" stroke-width="2"/>
+<circle cx="102.0" cy="142.0" r="6.5" style="fill:var(--b);stroke:var(--surface)" stroke-width="2"/>
+<text x="78.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t−4</text>
+<rect x="122" y="86" width="64" height="64" rx="4" style="fill:var(--tile)" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/>
+<line x1="138.0" y1="89" x2="138.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="125" y1="102.0" x2="183" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="154.0" y1="89" x2="154.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="125" y1="118.0" x2="183" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="170.0" y1="89" x2="170.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="125" y1="134.0" x2="183" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M178.0 87.0L185.0 94.0L178.0 101.0L171.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+<circle cx="130.0" cy="126.0" r="6.5" style="fill:var(--a);stroke:var(--surface)" stroke-width="2"/>
+<circle cx="178.0" cy="126.0" r="6.5" style="fill:var(--b);stroke:var(--surface)" stroke-width="2"/>
+<text x="154.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t−3</text>
+<rect x="198" y="86" width="64" height="64" rx="4" style="fill:var(--tile)" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/>
+<line x1="214.0" y1="89" x2="214.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="201" y1="102.0" x2="259" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="230.0" y1="89" x2="230.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="201" y1="118.0" x2="259" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="246.0" y1="89" x2="246.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="201" y1="134.0" x2="259" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M254.0 87.0L261.0 94.0L254.0 101.0L247.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+<circle cx="222.0" cy="126.0" r="6.5" style="fill:var(--a);stroke:var(--surface)" stroke-width="2"/>
+<circle cx="254.0" cy="126.0" r="6.5" style="fill:var(--b);stroke:var(--surface)" stroke-width="2"/>
+<text x="230.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t−2</text>
+<rect x="274" y="86" width="64" height="64" rx="4" style="fill:var(--tile)" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/>
+<line x1="290.0" y1="89" x2="290.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="277" y1="102.0" x2="335" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="306.0" y1="89" x2="306.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="277" y1="118.0" x2="335" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="322.0" y1="89" x2="322.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="277" y1="134.0" x2="335" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M330.0 87.0L337.0 94.0L330.0 101.0L323.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+<circle cx="298.0" cy="110.0" r="6.5" style="fill:var(--a);stroke:var(--surface)" stroke-width="2"/>
+<circle cx="330.0" cy="110.0" r="6.5" style="fill:var(--b);stroke:var(--surface)" stroke-width="2"/>
+<text x="306.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t−1</text>
+<rect x="350" y="86" width="64" height="64" rx="4" style="fill:var(--tile);stroke:var(--accent)" stroke-width="2.6"/>
+<line x1="366.0" y1="89" x2="366.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="353" y1="102.0" x2="411" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="382.0" y1="89" x2="382.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="353" y1="118.0" x2="411" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="398.0" y1="89" x2="398.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="353" y1="134.0" x2="411" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M406.0 87.0L413.0 94.0L406.0 101.0L399.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/>
+<circle cx="390.0" cy="110.0" r="6.5" style="fill:var(--a);stroke:var(--surface)" stroke-width="2"/>
+<circle cx="406.0" cy="110.0" r="6.5" style="fill:var(--b);stroke:var(--surface)" stroke-width="2"/>
+<text x="382.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t</text>
+<rect x="426" y="86" width="64" height="64" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="442.0" y1="89" x2="442.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="429" y1="102.0" x2="487" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="458.0" y1="89" x2="458.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="429" y1="118.0" x2="487" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="474.0" y1="89" x2="474.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="429" y1="134.0" x2="487" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M482.0 87.0L489.0 94.0L482.0 101.0L475.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.5"/>
+<circle cx="466.0" cy="94.0" r="6" style="fill:var(--a)" opacity=".22"/>
+<circle cx="466.0" cy="110.0" r="5.5" style="fill:var(--a)" opacity="0.9"/>
+<circle cx="466.0" cy="110.0" r="9" fill="none" style="stroke:var(--b)" stroke-width="2.6" opacity="0.9"/>
+<text x="458.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t+1</text>
+<rect x="502" y="86" width="64" height="64" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="518.0" y1="89" x2="518.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="505" y1="102.0" x2="563" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="534.0" y1="89" x2="534.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="505" y1="118.0" x2="563" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="550.0" y1="89" x2="550.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="505" y1="134.0" x2="563" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M558.0 87.0L565.0 94.0L558.0 101.0L551.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.5"/>
+<circle cx="558.0" cy="94.0" r="6" style="fill:var(--a)" opacity=".22"/>
+<circle cx="558.0" cy="110.0" r="6" fill="none" style="stroke:var(--b)" stroke-width="2.5" opacity=".3"/>
+<circle cx="542.0" cy="94.0" r="5.5" style="fill:var(--a)" opacity="0.7"/>
+<circle cx="542.0" cy="94.0" r="9" fill="none" style="stroke:var(--b)" stroke-width="2.6" opacity="0.7"/>
+<text x="534.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t+2</text>
+<rect x="578" y="86" width="64" height="64" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="594.0" y1="89" x2="594.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="581" y1="102.0" x2="639" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="610.0" y1="89" x2="610.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="581" y1="118.0" x2="639" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="626.0" y1="89" x2="626.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="581" y1="134.0" x2="639" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M634.0 87.0L641.0 94.0L634.0 101.0L627.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.5"/>
+<circle cx="634.0" cy="94.0" r="5.5" style="fill:var(--a)" opacity="0.55"/>
+<circle cx="634.0" cy="94.0" r="9" fill="none" style="stroke:var(--b)" stroke-width="2.6" opacity="0.55"/>
+<text x="610.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t+3</text>
+<rect x="654" y="86" width="64" height="64" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="670.0" y1="89" x2="670.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="657" y1="102.0" x2="715" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="686.0" y1="89" x2="686.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="657" y1="118.0" x2="715" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="702.0" y1="89" x2="702.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="657" y1="134.0" x2="715" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M710.0 87.0L717.0 94.0L710.0 101.0L703.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.5"/>
+<text x="686.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t+4</text>
+<rect x="730" y="86" width="64" height="64" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="746.0" y1="89" x2="746.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="733" y1="102.0" x2="791" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="762.0" y1="89" x2="762.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="733" y1="118.0" x2="791" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="778.0" y1="89" x2="778.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="733" y1="134.0" x2="791" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M786.0 87.0L793.0 94.0L786.0 101.0L779.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.5"/>
+<text x="762.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t+5</text>
+<rect x="806" y="86" width="64" height="64" rx="4" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2" stroke-dasharray="4 3"/>
+<line x1="822.0" y1="89" x2="822.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="809" y1="102.0" x2="867" y2="102.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="838.0" y1="89" x2="838.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="809" y1="118.0" x2="867" y2="118.0" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="854.0" y1="89" x2="854.0" y2="147" stroke="currentColor" stroke-opacity=".11"/>
+<line x1="809" y1="134.0" x2="867" y2="134.0" stroke="currentColor" stroke-opacity=".11"/>
+<path d="M862.0 87.0L869.0 94.0L862.0 101.0L855.0 94.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.5"/>
+<text x="838.0" y="168" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">t+6</text>
+<circle cx="53" cy="198" r="6" style="fill:var(--a)"/><text x="66" y="202" font-size="12" fill="currentColor">capturer</text>
+<circle cx="143" cy="198" r="6" style="fill:var(--b)"/><text x="156" y="202" font-size="12" fill="currentColor">recharger</text>
+<path d="M253.0 191.0L260.0 198.0L253.0 205.0L246.0 198.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6"/><text x="266" y="202" font-size="12" fill="currentColor">target</text>
+<circle cx="363" cy="198" r="6" fill="currentColor"/><text x="376" y="202" font-size="12" fill="currentColor">solid: a fact</text>
+<circle cx="493" cy="198" r="4.5" fill="currentColor" opacity=".6"/><circle cx="493" cy="198" r="8" fill="none" stroke="currentColor" stroke-width="2.2" opacity=".6"/><text x="509" y="202" font-size="12" fill="currentColor">disc in a ring: both tubes on one cell</text>
+<path d="M763.0 191.0L770.0 198.0L763.0 205.0L756.0 198.0Z" fill="var(--surface)" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2.5"/><text x="776" y="202" font-size="12" fill="currentColor">dashed: a forecast</text>
+</svg></div>
+  <figcaption>The window on a 4×4 excerpt, drawn with a longer past than the design uses. Behind the front the input holds where the drones really were. Ahead of it the rule has grown the tubes of a capturer and a recharger onto the same cells: they meet at t+1 and reach the target at t+3.</figcaption>
+</figure>
+<div class="scroll"><table class="wide">
+  <thead><tr><th>Channel group</th><th class=num>Count</th><th>Content</th><th>Non-zero in</th></tr></thead>
+  <tbody>
+    <tr><td>Map (input)</td><td class=num>2</td><td>Obstacle, road</td><td>Every slice</td></tr>
+    <tr><td>Sensed (input)</td><td class=num>2</td><td>This cell was inside a sensing radius; the target was found here</td><td>Past and present</td></tr>
+    <tr><td>Kind and code (input)</td><td class=num>3 × 16</td><td>For each kind, the sum of the codes of the drones of that kind on this cell</td><td>Past and present</td></tr>
+    <tr><td>Battery (input)</td><td class=num>16</td><td>The sum of battery level × code over the drones on this cell</td><td>Past and present</td></tr>
+    <tr><td>State</td><td class=num>32</td><td>Free for the rule to use; kept from step to step</td><td>Everywhere</td></tr>
+    <tr><td>Tube (output)</td><td class=num>16</td><td>A vector per voxel. Drone i's tube is its inner product with code i</td><td>Read in future slices</td></tr>
+    <tr><td>Total</td><td class=num>116</td><td>68 input, 32 state, 16 output</td><td></td></tr>
+  </tbody>
+</table></div>
+<p><strong>What the input holds.</strong> Clamping writes the input channels of the present slice after every step: which cells were sensed, the target if it was sensed, and each drone's kind, code and battery. When the window slides, that slice becomes a past slice and keeps what was written. Future slices hold the map and nothing else. At reset the past slices hold the map only. A battery level is given in steps divided by 24, so that the largest capacity reads 1; a recharger always reads 1. A drone that has been removed is no longer written, its tube is no longer read, and it has no loss term from then on. The lattice is not told that a capture happened or that a new target exists; it sees only what the sensors report.</p>
+<p><strong>Codes.</strong> At the start of an episode every drone receives its own one-hot vector of length 16, drawn at random. Its tube is the inner product of the output vector with that code, which is one of the sixteen output channels. Because the assignment is redrawn every episode, no channel can come to mean a fixed drone or role. A rule built from rectified units can gate one channel without touching the others. Codes drawn as random rotations are the alternative to test <span class="tag u">not yet tested</span>.</p>
+<pre>c  = conv 3×3×3 ( X )                      <span class="c">once per step: the inputs do not change between iterations</span>
+h  = relu( conv 3×3×3 ( S ) + c )          <span class="c">zero padding; the only place neighbours are seen</span>
+S  ← bound( S + W3 · relu( W2 · h ) )      <span class="c">bound: divide by max(1, root-mean-square over the voxel's channels)</span>
+Y  = Wout · S                              <span class="c">the 16 tube channels, one voxel at a time</span></pre>
+<p>All weights are shared across voxels, slices and iterations. There are no coordinate channels, no pooling, no attention and no iteration counter. With 68 input channels, 32 state channels and 128 hidden units the rule has about 370,000 weights. The kernel sees one slice back and one ahead, so information flows from the present towards the future and from a future meeting back to the present. The state is kept in full precision and only the convolutions run in a reduced format.</p>
+<p><strong>Plans longer than the window.</strong> A tube shows the next 16 steps of a drone's route. Whatever lies further ahead is carried by the state, which spreads across the map at one cell per iteration: 48 cells at reset, then 4 per step, while drones move 1. The labels a tube is trained on are the cells the drone really occupied over the next 16 steps of a kept leg, whether or not the capture lies inside the window.</p>
+
+
+<h2 id="acting"><span class="sec">§6</span>Acting</h2><pre>reset
+    S ← 0;  X ← map in every slice                            <span class="c"></span>
+    give every drone a code
+    clamp the first observation into the present slice
+    run the rule K0 times
+
+every step t
+    for every drone i, all at once
+        for each action a:  u[a] ← sim.peek(i, a)             <span class="c">the cell the action leads to</span>
+        score[a] ← ⟨ Y[present + 1][u[a]], code_i ⟩           <span class="c"></span>
+        a_i ← argmax score                                    <span class="c">when searching: a sampled action (§7)</span>
+    observation, reward ← sim.step(a_1 … a_n)
+    slide S and X one slice towards the past                  <span class="c">the new last slice: S = 0, X = map</span>
+    clamp the observation into the present slice              <span class="c"></span>
+    run the rule k_s times</pre>
+<ul>
+  <li>Drones are steered by tubes, which are positions in space-time, and never by a field of arrows. A drone moves to the reachable cell where its own tube is strongest in the next slice.</li>
+  <li>There is no order among drones. One step costs k_s iterations of the rule, whatever the size of the team.</li>
+  <li>The lattice keeps its state. A plan made at one step is still there at the next unless new facts contradict it <span class="tag u">not yet tested</span>.</li>
+  <li>When evaluating there is one lattice, no noise and no search.</li>
+  <li><strong>Commit groups, a dial that starts at one.</strong> To commit is to clamp a drone's chosen next cell into the next slice before other drones choose. With two groups, a random half of the drones chooses and commits, the rule runs once, and then the other half chooses. This is version 1's mechanism at a fraction of its cost, and it is switched on only if two drones of one kind keep ending up on one strand.</li>
+</ul>
+
+
+<h2 id="search"><span class="sec">§7</span>Search</h2>
+<p>The rule can only learn what search has found, so search is where compute goes. A trunk is one training episode. At every cut, many clones of the team are started from the same saved state, each with its own strategy and world, and three stages decide what is kept.</p>
+<pre>round
+    draw 32 trunks from the training mixture                                   <span class="c">map, team, start cells, batteries</span>
+    for each trunk, until 96 steps have passed or no capturer is left
+        cut: save simulator and lattice just before a target is drawn          <span class="c">at reset, after a capture or a relocation</span>
+        screen     M strategies in W1 worlds, closed loop                      <span class="c">the same worlds for all</span>
+                   V[σ] ← mean over worlds of γ^(steps to capture)             <span class="c">0 without a capture</span>
+        confirm    the best E strategies and the greedy one in W2 fresh worlds <span class="c"></span>
+                   σ* ← the best of them, if it passes the test below          <span class="c">else store nothing</span>
+        harvest    σ* in W3 further fresh worlds                               <span class="c">only these give weights and credit</span>
+        continue the trunk from the end state of one clone                     <span class="c">see below</span>
+    learn from the harvested legs (§9)</pre>
+<figure>
+  <div class="scroll diagram"><svg viewBox="0 0 920 292" role="img" aria-label="Left: five strategies are run from the same snapshot in the same four worlds; strategy 7 has the highest average, 0.75, beats the greedy rule at 0.50 and is kept. Right: the kept leg is replayed with recorded actions restored one drone at a time, observer, capturer A, recharger, capturer B, while the others act at random; the value rises from 0 to 0.25, 0.50 and 0.75, so the shares are 0, 0.25, 0.25 and 0.25.">
+<defs><marker id="f2arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+<text x="64" y="22" font-size="13" font-weight="600" fill="currentColor">Confirmation: every strategy meets the same fresh worlds</text>
+<text x="540" y="22" font-size="13" font-weight="600" fill="currentColor">Credit: recorded actions restored one drone at a time</text>
+<text x="172" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">w1</text>
+<text x="212" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">w2</text>
+<text x="252" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">w3</text>
+<text x="292" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">w4</text>
+<text x="346" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" opacity=".8">value</text>
+<text x="672" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">w1</text>
+<text x="712" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">w2</text>
+<text x="752" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">w3</text>
+<text x="792" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" class="mono" opacity=".8">w4</text>
+<text x="842" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" opacity=".8">value</text>
+<text x="898" y="62" font-size="11.5" text-anchor="middle" fill="currentColor" opacity=".8">credit</text>
+<rect x="150" y="105" width="218" height="30" rx="6" style="fill:var(--accent-soft);stroke:var(--accent)" stroke-width="1.8"/>
+<text x="140" y="90" font-size="12.5" text-anchor="end" fill="currentColor">greedy</text>
+<circle cx="172" cy="86" r="8" fill="currentColor"/>
+<circle cx="212" cy="86" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="252" cy="86" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="292" cy="86" r="8" fill="currentColor"/>
+<text x="346" y="90" font-size="12.5" text-anchor="middle" fill="currentColor" class="mono">0.50</text>
+<text x="140" y="124" font-size="12.5" text-anchor="end" fill="currentColor">strategy 7</text>
+<circle cx="172" cy="120" r="8" fill="currentColor"/>
+<circle cx="212" cy="120" r="8" fill="currentColor"/>
+<circle cx="252" cy="120" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="292" cy="120" r="8" fill="currentColor"/>
+<text x="346" y="124" font-size="12.5" text-anchor="middle" fill="currentColor" class="mono">0.75</text>
+<text x="140" y="158" font-size="12.5" text-anchor="end" fill="currentColor">strategy 12</text>
+<circle cx="172" cy="154" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="212" cy="154" r="8" fill="currentColor"/>
+<circle cx="252" cy="154" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="292" cy="154" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<text x="346" y="158" font-size="12.5" text-anchor="middle" fill="currentColor" class="mono">0.25</text>
+<text x="140" y="192" font-size="12.5" text-anchor="end" fill="currentColor">strategy 19</text>
+<circle cx="172" cy="188" r="8" fill="currentColor"/>
+<circle cx="212" cy="188" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="252" cy="188" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="292" cy="188" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<text x="346" y="192" font-size="12.5" text-anchor="middle" fill="currentColor" class="mono">0.25</text>
+<text x="140" y="226" font-size="12.5" text-anchor="end" fill="currentColor">strategy 23</text>
+<circle cx="172" cy="222" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="212" cy="222" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="252" cy="222" r="8" fill="currentColor"/>
+<circle cx="292" cy="222" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<text x="346" y="226" font-size="12.5" text-anchor="middle" fill="currentColor" class="mono">0.25</text>
+<text x="380" y="124" font-size="12.5" font-weight="600" style="fill:var(--accent)">kept</text>
+<line x1="418" y1="120" x2="520" y2="120" stroke="currentColor" stroke-width="1.4" marker-end="url(#f2arr)"/>
+<text x="469.0" y="111" font-size="12" text-anchor="middle" fill="currentColor">run again</text>
+<text x="648" y="90" font-size="12.5" text-anchor="end" fill="currentColor">observer</text>
+<circle cx="672" cy="86" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="712" cy="86" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="752" cy="86" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="792" cy="86" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<text x="842" y="90" font-size="12.5" text-anchor="middle" fill="currentColor" class="mono">0.00</text>
+<text x="898" y="90" font-size="12.5" font-weight="600" text-anchor="middle" fill="currentColor" class="mono">0.00</text>
+<text x="648" y="124" font-size="12.5" text-anchor="end" fill="currentColor">+ capturer A</text>
+<circle cx="672" cy="120" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="712" cy="120" r="8" fill="currentColor"/>
+<circle cx="752" cy="120" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="792" cy="120" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<text x="842" y="124" font-size="12.5" text-anchor="middle" fill="currentColor" class="mono">0.25</text>
+<text x="898" y="124" font-size="12.5" font-weight="600" text-anchor="middle" fill="currentColor" class="mono">0.25</text>
+<text x="648" y="158" font-size="12.5" text-anchor="end" fill="currentColor">+ recharger</text>
+<circle cx="672" cy="154" r="8" fill="currentColor"/>
+<circle cx="712" cy="154" r="8" fill="currentColor"/>
+<circle cx="752" cy="154" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="792" cy="154" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<text x="842" y="158" font-size="12.5" text-anchor="middle" fill="currentColor" class="mono">0.50</text>
+<text x="898" y="158" font-size="12.5" font-weight="600" text-anchor="middle" fill="currentColor" class="mono">0.25</text>
+<text x="648" y="192" font-size="12.5" text-anchor="end" fill="currentColor">+ capturer B</text>
+<circle cx="672" cy="188" r="8" fill="currentColor"/>
+<circle cx="712" cy="188" r="8" fill="currentColor"/>
+<circle cx="752" cy="188" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/>
+<circle cx="792" cy="188" r="8" fill="currentColor"/>
+<text x="842" y="192" font-size="12.5" text-anchor="middle" fill="currentColor" class="mono">0.75</text>
+<text x="898" y="192" font-size="12.5" font-weight="600" text-anchor="middle" fill="currentColor" class="mono">0.25</text>
+<circle cx="544" cy="256" r="8" fill="currentColor"/><text x="558" y="260" font-size="12" fill="currentColor">target captured in this world</text>
+<circle cx="752" cy="256" r="8" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.4"/><text x="766" y="260" font-size="12" fill="currentColor">not captured</text>
+</svg></div>
+  <figcaption>One leg with a hidden target. Left, confirmation: the strategies that survived screening are run from the same snapshot in the same fresh worlds, and one of them beats the greedy rule. Right, credit in the simulator: the kept leg is replayed with recorded actions restored one drone at a time in a random order while the remaining drones act at random; each drone's share is what restoring it adds (§8). An observer's actions add nothing here, since the others repeat what they did anyway. Its share comes from the second test of §8.</figcaption>
+</figure>
+<ul>
+  <li><strong>A cut is taken only at a moment when nothing hidden has been decided yet,</strong> so that every world is equally possible from the team's point of view. No belief filter is written by hand, and no comparison ever uses the hidden position. A second cut at the first sighting, where only the target's tie-breaks remain unknown, is a dial <span class="tag u">not yet tested</span>.</li>
+  <li><strong>A clone runs</strong> until it captures, until 48 steps have passed (the leg limit H), until the trunk's 96th step, or until it has no capturer left.</li>
+  <li><strong>Three sets of worlds, three jobs.</strong> Screening scores only choose what to look at again. A strategy is kept only on worlds it was not selected on, and it is imitated only in worlds that had no part in keeping it. With 256 equal strategies, 8 worlds and a capture rate near one half, the best one looks about 45 points better than it is <span class="tag u">estimate</span>.</li>
+  <li><strong>The confirmation test.</strong> For each of the W2 worlds, d is the value of the candidate minus the value of the greedy rule in that world. The candidate is kept only if the mean of d exceeds 2.2 times its standard error, which is the standard deviation of d divided by the square root of W2. For four candidates that is a false-pass rate of about 5% <span class="tag u">estimate</span>. A standing audit sends identical strategies through all three stages; they must pass in at most 5% of cuts <span class="tag u">not yet tested</span>.</li>
+  <li><strong>Where the trunk continues.</strong> If a strategy was kept: from its end state in one harvest world drawn at random, and half of the time from the greedy clone in one confirmation world instead, so that the rule is also trained on states it reaches by itself. If nothing was kept: from the greedy clone in one confirmation world.</li>
+  <li><strong>Exploration noise.</strong> Each strategy draws a temperature between 0.25 and 2, an excursion rate between 0 and 0.3, and a hold length between 1 and 4. At every step a drone either starts an excursion with that rate, which is one random action repeated for up to the hold length, or samples its action from its scores, standardised over its five options and divided by the temperature. Noise is independent between drones, and the rule never sees it, so what search finds is learned as a response to observations alone. The measured recipe contained such held actions <span class="tag m">measured</span>; their separate effect was not measured, and version 1 had removed them <span class="tag q">needs approval</span>. The 10 points that were measured belonged to noise shared between drones, which this design does not use. It relies on more clones: before training, 256 independent rollouts found a reward about as often as 64 with shared noise, 7.0% against 9.0% <span class="tag m">measured</span>.</li>
+  <li><strong>Batteries carry over from leg to leg.</strong> A leg that starts with low batteries cannot be won without a recharger, so recharge-needed legs arise without any task filter.</li>
+  <li><strong>Only improvements are stored</strong> <span class="tag u">not yet tested</span>. The greedy rule's own captures are not imitated; at the start they are accidents. This differs from the measured recipe, which kept the earliest rewarded rollout even when it was the greedy one. Storing greedy captures with their credit is a comparison arm, judged by how often legs that were solved 50 rounds earlier are still solved.</li>
+  <li><strong>A dial that is off at the start:</strong> redrawing the noise of a random block of one to three drones in the best strategies and screening again. Its cost grows in proportion to the number of drones, where sampling all drones independently needs exponentially more rollouts.</li>
+  <li><strong>Dropped:</strong> recombination of recorded action lists once anything is hidden, search trees, value estimates, backups, and any search at evaluation time.</li>
+</ul>
+<h3>Why an untrained team finds reward</h3>
+<p>An untrained rule has flat tubes, so drones follow their noise. Against a target that sees two cells, a lone drone cannot capture in the open, so first rewards come from two drones closing by chance and from pockets in the terrain. An untrained team also loses its capturers within one battery life, about 12 steps, so early trunks are one short leg long; second legs and legs that start with low batteries appear only once capturers have learned to be refilled. How often a first reward occurs is not known and is the first thing measured on the cluster, before any training (§13). The levers, in the order in which they are pulled:</p>
+<ol>
+  <li>More clones. This is compute and nothing else.</li>
+  <li>Smaller grids in the training mixture <span class="tag q">needs approval</span>. With the full team of ten, a new target has a capturer and a second drone within three cells in about 35 to 45% of draws on 12×12, against 4 to 5% on 24×24; with a team of five or six it is about 15% on 12×12. These are hand estimates for drones placed uniformly on a map without obstacles <span class="tag u">estimate</span>, and being near is not yet a capture. Training maps also keep the dead ends that evaluation maps lose (§3).</li>
+  <li>A target that sometimes fails to move, as a declared setting of the environment <span class="tag q">needs approval</span>. This would reopen the decision that the target is as fast as a drone, for training only.</li>
+  <li>Targets with a shorter sight in training <span class="tag q">needs approval</span>. This makes the task easier in the same way a larger capture radius would, so it comes last.</li>
+</ol>
+<p>Evaluation always uses the full target. The long evaluation episode, with a recharge, an approach longer than one battery allows, a search and a closure from two sides, cannot be found by sampling in one piece, and training legs end after 48 steps. It has to be assembled by the rule from what short legs taught. Whether that happens is the main risk of the programme.</p>
+
+
+<h2 id="credit"><span class="sec">§8</span>Credit</h2>
+<p>A capture says that a joint plan worked. It does not say whose behaviour made it work. Two tests answer that for the kept strategy, in each harvest world. Both count captures within the leg limit.</p>
+<pre>what the drone did                                    simulator only, no lattice
+    for each of R orders of the drones                                                  <span class="c">an order and its reverse</span>
+        for j = 0 … n:  replay the leg K times; the first j drones repeat their         <span class="c"></span>
+                        recorded actions, the others act at random, the target reacts   <span class="c">same random draws for every j</span>
+                        v[j] ← share of the K replays that capture                      <span class="c"></span>
+        for j = 1 … n:  share of the j-th drone ← v[j] − v[j − 1]                       <span class="c"></span>
+
+what the drone sensed                                 with the lattice, same noise, same world
+    run the leg again unchanged, and once per drone with that drone's sensing withheld  <span class="c"></span>
+    share of drone i ← capture unchanged − capture without its sensing                  <span class="c">each 1 or 0</span>
+
+credit[i] ← the larger of its two mean shares over orders and harvest worlds,
+            if that mean clears the threshold; otherwise 0</pre>
+<ul>
+  <li>In a harvest world where the kept strategy did not capture, every share is zero. Such worlds stay in the mean.</li>
+  <li>The first test is the rule of the audited 8×8 run <span class="tag m">measured</span>, extended from "one drone at random" to random orders. With several capturers, those whose moves mattered share the credit, and one that merely followed gets none. Lesioning one drone at a time in closed loop would give every capturer nothing, because another takes over.</li>
+  <li>The second test is the only way an observer can earn credit: in the first test the others repeat their recorded actions, and those actions already contain what the observer found. It becomes a weight in phase 4, where observers first appear, once it has passed the ghost audit there <span class="tag u">not yet tested</span>.</li>
+  <li><strong>The threshold.</strong> A mean share counts only if it exceeds a multiple of its standard error, taken over the harvest worlds. The multiple is set by the ghost audit: a ghost drone must clear it in at most 2% of legs. With 8 replays, 8 worlds and 2 orders, a threshold of one standard error would let a drone that did nothing through in about one leg in four <span class="tag u">estimate</span>, so the multiple and the number of replays are expected to rise in phase 3.</li>
+  <li>Shares are never divided by a small value and never used per run. A positive weight for drones that did nothing would repeat the failure that was measured when irrelevant motion was imitated: the recharger learned to stand still <span class="tag m">measured</span>.</li>
+  <li><strong>A second audit.</strong> On teams of up to five, the sampled shares are compared with the exact ones, obtained by averaging over every order of the drones.</li>
+  <li><strong>Comparison arm:</strong> closed-loop reruns with drones removed from the simulator, in a random order. One mechanism for both questions, at 9 lattice runs per world for a team of ten.</li>
+</ul>
+
+
+<h2 id="learning"><span class="sec">§9</span>Learning</h2><pre>for each batch of 64 harvested legs, with iteration counts redrawn
+    rebuild each lattice by replaying its trunk up to the cut     <span class="c">no gradient</span>
+    for every step t of the leg                                   <span class="c">recorded observations and actions, no noise</span>
+        for every drone i and every j = 1 … 16 with t + j inside the leg
+            loss += w(ω, t) · credit[i] · cross-entropy( softmax over the cells of ⟨ Y[present + j], code_i ⟩ ,
+                                                         the cell of drone i at time t + j )
+        after every second step: back-propagate through those two steps, update, detach<span class="c"></span></pre>
+<ul>
+  <li><strong>The weight w(ω, t) follows what the team could know</strong> <span class="tag q">needs approval</span>. Two harvest worlds are indistinguishable at step t if the team's observations in them have been identical up to t. A dream read at step t in world ω is weighted by the mean return of the kept strategy over the harvest worlds that are indistinguishable from ω at t, and it is imitated in every one of them. While nothing has been sensed, all worlds look alike, so a way of searching is imitated also where it found nothing: it was right there too, and the target only happened to be far away. Once the observations differ, a world stands alone and its dreams are weighted by its own return, so a chase that failed is not imitated. The rule is stated on observations and names nothing in the task.</li>
+  <li>With everything visible, every world stands alone from the first step, and the rule reduces to imitating the kept strategy's captured legs. The measured system did the same, except that it also kept the greedy rollout when that was the earliest rewarded one.</li>
+  <li>Each drone has one softmax over the cells of a slice: a drone is in one place at a time. There is no shared target per kind, which could not tell two drones on one strand from two drones on two.</li>
+  <li>Except in the first steps of a trunk, the loss starts from a state that has already run for hundreds of iterations and carries no gradient. Training on its own long-run states is what the published recipes for "more iterations must not hurt" have in common; here it comes with the kept lattice. Iteration counts are redrawn for every replay (K0 from 32 to 128, k_s from 2 to 6), and Gaussian noise of standard deviation 0.02 is added to every state update during replay.</li>
+  <li><strong>What is stored for a leg:</strong> the seeds of map, team and worlds, the trunk's actions up to the cut, the leg's actions in each harvest world, the codes, the credits and the weights. The learner runs the simulator again from these to regenerate the observations. Legs are used in the round that found them. Optimiser Adam, learning rate from 0.001 falling to 0.0002.</li>
+  <li>There is no forecast loss, and no gradient or selection signal ever comes from the hidden position of the target. The diagnostic readout of §10 is fitted afterwards on saved states, in a separate process whose code the learner does not import.</li>
+</ul>
+
+
+<h2 id="gates"><span class="sec">§10</span>Gates and controls</h2>
+<p>A gate is a check that every later phase must keep passing. A control is the same model on the same seeds with one thing taken away.</p>
+<div class="scroll"><table class="wide">
+  <thead><tr><th>Gate</th><th>What must hold</th><th>The 8×8 rule today</th></tr></thead>
+  <tbody>
+    <tr><td>More computation never hurts (the iteration gate)</td><td>K0 and k_s are multiplied together by 2, 4 and 8. On 2,000 held-out tasks the lower 95% bound of the paired difference in closed-loop success stays above −2 points. A longer window and more clones are checked by retraining at the end of phases 3 and 5</td><td>Open loop, at twice the iterations the two checkpoints lost 5 and 18 points <span class="tag m">measured</span></td></tr>
+    <tr><td>One drone, one strand</td><td>On 8×8 with one recharger and two, three or five seekers that each have their own target, all seekers arrive in at least 60% of tasks</td><td>34% for two seekers in one channel, never trained that way <span class="tag m">measured</span></td></tr>
+    <tr><td>Tubes, not arrows</td><td>With everything visible, clamping and iterating only every fourth step, while drones follow the tubes already grown, costs at most 5 points. The share of steps in which a drone's planned cell two steps ahead changes although no new fact arrived is reported</td><td>Flying the whole 8×8 dream without replanning cost 2 to 3 points <span class="tag m">measured</span></td></tr>
+    <tr><td>Reach</td><td>Capture rate falls by at most 10 points between episodes whose first sighting is within 10 cells of the nearest capturer and those where it is 30 to 40 cells away, and doubling K0 does not improve it</td><td>Not applicable</td></tr>
+    <tr><td>Search does not keep luck</td><td>Identical strategies sent through screen, confirm and harvest pass confirmation in at most 5% of cuts</td><td>Not applicable</td></tr>
+    <tr><td>Credit does not pay bystanders</td><td>A ghost drone clears the credit threshold in at most 2% of legs</td><td>Not applicable</td></tr>
+    <tr><td>No domain concept in the learner</td><td>A text search of the learner's source finds none of the words in rule 1 of §4, and the learner imports no benchmark code. Both checks are part of the test suite on the cluster</td><td>Passed in the audited path</td></tr>
+    <tr><td>The evaluator is independent</td><td>A second implementation of simulator and readout, written from this document, reproduces the stored numbers</td><td>Done once, for the first passing checkpoint <span class="tag m">measured</span></td></tr>
+  </tbody>
+</table></div><div class="scroll"><table class="wide">
+  <thead><tr><th>Control</th><th>Certifies</th><th>Expected</th></tr></thead>
+  <tbody>
+    <tr><td>Rechargers removed, or left in the team with refills switched off</td><td>A recharge is required</td><td>Exactly 0. Any capture is a bug in the benchmark</td></tr>
+    <tr><td>Rechargers frozen where they start</td><td>Recharging must be organised, not merely available</td><td>At most 5%</td></tr>
+    <tr><td>One capturer alone</td><td>Coordination is required</td><td>Exactly 0</td></tr>
+    <tr><td>One capturer with all rechargers and observers</td><td>How much capture comes from herding by drones that cannot capture</td><td>Reported</td></tr>
+    <tr><td>Obstacle channel zeroed in the input</td><td>Obstacles must be flown around</td><td>At most half the headline rate</td></tr>
+    <tr><td>Observers removed; observers flying with their sensing withheld</td><td>Scouting matters, and through information</td><td>A drop whose interval excludes zero</td></tr>
+    <tr><td>Scripted team that always sees the target</td><td>Capture is possible on the evaluation set</td><td>At least 90%, published as a reference</td></tr>
+    <tr><td>Target always visible</td><td>The price of partial observability</td><td>Reported</td></tr>
+    <tr><td>Batteries unlimited</td><td>The price of energy</td><td>Reported</td></tr>
+    <tr><td>A readout of the target's cell, fitted afterwards on saved states</td><td>The state still holds where the target was after the sighting has left the window</td><td>Better than 'where it was last seen', eight steps later</td></tr>
+    <tr><td>Random team</td><td>The task is not solved by chance</td><td>At most 1%</td></tr>
+  </tbody>
+</table></div>
+<p>Logged in every training run, because each is the first sign of a predicted failure: the share of cuts in which any strategy captures and the share in which one is confirmed; the distance from the new target to the nearest capturer in harvested legs against all legs; steps survived per capturer and legs per trunk; credit per kind; recharges per captured leg; how many drones the target saw at the moment of capture and whether the capturing drone was moving towards it; the size of the state; how often two drones of one kind share a cell.</p>
+
+
+<h2 id="compute"><span class="sec">§11</span>Compute</h2><div class="scroll"><table class="wide">
+  <thead><tr><th>Dial</th><th>Start</th><th>More of it buys</th><th>Paid in</th></tr></thead>
+  <tbody>
+    <tr><td>Trunks and cuts per round</td><td>32 trunks, about 64 cuts</td><td>More situations per update</td><td>Everything below</td></tr>
+    <tr><td>Strategies per cut, M</td><td>32</td><td>More chances of a better leg</td><td>Lattice runs</td></tr>
+    <tr><td>Worlds: screen W1, confirm W2, harvest W3; candidates E</td><td>W1 = 4, E = 4, W2 = 16, W3 = 8</td><td>Selection by skill instead of luck</td><td>Lattice runs</td></tr>
+    <tr><td>Leg limit H; preference for speed γ</td><td>48 steps; 0.97</td><td>Longer chases can be credited</td><td>Lattice runs</td></tr>
+    <tr><td>Iterations at reset K0, per step k_s</td><td>48, 4</td><td>Reach, and computation per decision</td><td>K0 once per trunk; k_s in every clone</td></tr>
+    <tr><td>Window: past, future</td><td>3, 16</td><td>Memory of facts, depth of the dream</td><td>Every iteration</td></tr>
+    <tr><td>State channels, hidden units</td><td>32, 128</td><td>Capacity of the rule</td><td>Every iteration</td></tr>
+    <tr><td>Credit: replays K, orders R</td><td>8; 2</td><td>Sharper shares</td><td>Simulator steps only</td></tr>
+    <tr><td>Block redraws of the best strategies</td><td>Off</td><td>Joint changes at a cost linear in the team</td><td>Lattice runs</td></tr>
+    <tr><td>Commit groups</td><td>1</td><td>Fewer drones on one strand</td><td>One extra iteration per group</td></tr>
+    <tr><td>Back-propagation span</td><td>2 steps</td><td>Memory that is taught over longer gaps</td><td>Training memory</td></tr>
+    <tr><td>Batch; learning rate</td><td>64 legs; 0.001 falling to 0.0002</td><td>Steadier updates</td><td>Learning time</td></tr>
+  </tbody>
+</table></div>
+<h3>Cost model</h3>
+<p>All figures are hand arithmetic on a throughput that has not been measured <span class="tag u">estimate</span>. The first act on the cluster is to measure it.</p>
+<ul>
+  <li>Window at 24×24: 20 slices × 576 cells = 11,520 voxels. One iteration costs 131,000 multiply-adds per voxel. The input convolution runs once per step and costs 1.8 iterations.</li>
+  <li>One clone-step: 5.8 iterations × 11,520 voxels = 67,000 voxel-iterations. Version 1, with 12 iterations on its 27-slice window and a slightly larger rule, needed about 207,000 in the same unit, three times more.</li>
+  <li>One cut: 32 × 4 + 5 × 16 + 8 = 216 clones of at most 48 steps: 10,400 clone-steps, or 6.9 × 10<sup>8</sup> voxel-iterations. Clones start from the trunk's lattice, so K0 is paid once per trunk.</li>
+  <li>One round: search at 64 cuts, 4.4 × 10<sup>10</sup>; the sensing test, 11 reruns in each of 8 harvest worlds for every kept strategy, up to 1.8 × 10<sup>10</sup>; rebuilding trunks and learning, about 0.3 × 10<sup>10</sup>. Together about 6 × 10<sup>10</sup> voxel-iterations when half of the cuts keep a strategy. Version 1 at this scale and at its own dials: about 2 × 10<sup>12</sup>.</li>
+  <li>At an assumed 110 to 440 million voxel-iterations per second per H100 (the earlier estimate of 100 to 400 million, rescaled to this rule): two to nine minutes per round on one GPU, and <strong>35 to 140 GPU-hours for a 900-round run at full scale</strong>. On seven H100s, the number assumed until the cluster is known, that is 5 to 20 hours. A 12×12 run costs about a quarter of that or less, a 16×16 run a little under half.</li>
+  <li>The 900 rounds are carried over from the 8×8 runs. Under a hidden target the improvement per round is smaller, and the number of rounds may be several times higher. Budgets are set again after the throughput benchmark and a 25-round take-off test.</li>
+</ul>
+
+
+<h2 id="priors"><span class="sec">§12</span>Priors and removals</h2>
+<p>What the design still assumes, why, and the test that could remove each assumption. What was removed since version 1 is listed in §1.</p>
+<div class="scroll"><table class="wide">
+  <thead><tr><th>Prior</th><th>Why it is there</th><th>Test that could remove it</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>A local rule shared by all voxels of a space-time lattice, with tubes as output</td><td>The object of study</td><td>None</td><td>Kept</td></tr>
+    <tr><td>3×3×3 neighbourhood with zero padding</td><td>The smallest symmetric neighbourhood; padding makes the edges of the map and of the window visible</td><td>A wider neighbourhood at equal compute</td><td>Kept</td></tr>
+    <tr><td>One softmax per drone and slice; a one-step peek maps an action to a cell</td><td>A drone is in one place; the readout must know where an action leads</td><td>A per-voxel loss; scores read at the drone's own voxel</td><td>Kept</td></tr>
+    <tr><td>Codes that give each drone its own channel for an episode, at most 16 drones</td><td>Binding without fixed roles and without matching</td><td>One channel per kind, trained with several drones in it; codes as random rotations</td><td>Kept</td></tr>
+    <tr><td>Kinds as three fixed labels; the map as input</td><td>Inherited from the 8×8 design, where each type had its own channel</td><td>Zero each channel in the controls</td><td>Kept</td></tr>
+    <tr><td>Each drone's battery level as input</td><td>The one permitted exception</td><td>The 8×8 design, which hid it</td><td><span class="tag d">decided</span></td></tr>
+    <tr><td>All sensing pooled in one lattice at once</td><td>Decided</td><td>A communication range</td><td><span class="tag d">decided</span></td></tr>
+    <tr><td>Exploration noise held over several steps</td><td>Part of the measured recipe <span class="tag m">measured</span>. Version 1 had removed it</td><td>Single-step noise at equal clones</td><td><span class="tag q">needs approval</span></td></tr>
+    <tr><td>Legs with a 48-step limit; return γ^(steps), γ = 0.97, counted to the end of the leg</td><td>Respawning targets; sooner capture preferred. A count from the simulator, not a learned value</td><td>Whole-episode selection at equal budget; capture within the limit, without γ</td><td><span class="tag q">needs approval</span></td></tr>
+    <tr><td>Imitation weighted by the mean return over indistinguishable worlds, including worlds without a capture</td><td>The only way a way of searching can be imitated without a shaped reward</td><td>Own-world return on every step</td><td><span class="tag q">needs approval</span></td></tr>
+    <tr><td>The simulator can be saved, restored, redrawn in what is hidden, replayed with drones at random, and run with a drone's sensing withheld</td><td>Trunks, cuts and credit need it</td><td>Greedy-only trunks; no credit</td><td><span class="tag q">needs approval</span></td></tr>
+    <tr><td>Training mixture over grid sides 12, 16, 24 and team sizes</td><td>Dense encounters for an untrained team; size generalisation comes from varied sizes</td><td>Train on the full scenario only</td><td><span class="tag q">needs approval</span></td></tr>
+    <tr><td>Training maps keep dead ends; evaluation maps lose them</td><td>Terrain may help an untrained team; it must not do the capturing in the test</td><td>No dead ends in training either</td><td><span class="tag q">needs approval</span></td></tr>
+    <tr><td>Benchmark-side connectivity checks, shortest-path detour measure, two scripted teams, a readout of the hidden target position fitted afterwards</td><td>Certify the properties of §3 and measure belief, outside the learner</td><td>Certify by controls alone</td><td><span class="tag q">needs approval</span></td></tr>
+    <tr><td>Commit groups; block redraws of one to three drones</td><td>Dials for binding and for joint changes, off at the start</td><td>One group at equal iterations; no redraws at equal clones</td><td>Kept as dials</td></tr>
+    <tr><td>A target that sometimes fails to move, or sees less far, in training</td><td>Only if an untrained team finds no reward otherwise</td><td>The full target from the first round</td><td>Not in the design. <span class="tag q">needs approval</span> before use</td></tr>
+    <tr><td>A noise field the lattice can see, or noise shared between drones</td><td>Only if joint moves are sampled too rarely</td><td>Independent readout noise at equal clones</td><td>Not in the design. <span class="tag q">needs approval</span> before use</td></tr>
+    <tr><td>Coarser copies of the lattice at half and quarter resolution</td><td>Only if the reach gate fails</td><td>The flat lattice with more iterations at equal cost</td><td>Not in the design. <span class="tag q">needs approval</span> before use</td></tr>
+    <tr><td>A forecast of the target trained on later sightings; state channels that do not slide with the window</td><td>Only if what was seen is forgotten</td><td>The design as it stands</td><td>Not in the design. <span class="tag q">needs approval</span> before use</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="roadmap"><span class="sec">§13</span>Roadmap</h2>
+<p>Seven phases. Each is a short series of small experiments with one change per run and one gate. A phase that fails its gate is analysed on trajectories and then repeated or stopped; nothing outside the dials of §11 is added to the learner to get past a gate. The rows of §15 are decided before the phase that needs them: the benchmark rows before phase 1, the search and training rows before phase 2. Phases 2 to 5 are development steps. The claim in phase 6 is made by one recipe trained from scratch. GPU-hours are estimates <span class="tag u">estimate</span> for the number of runs named in each row, at 900 rounds per run.</p>
+<div class="scroll"><table class="wide phase">
+  <thead><tr><th>Phase</th><th>Goal</th><th>Experiments</th><th>Gate</th><th>GPU-hours</th></tr></thead>
+  <tbody>
+    <tr><td>0 · Arrival</td><td>Replace every estimate the plan rests on. No learner</td><td>Connect; probe the cluster, including git push rights; throughput in three numeric formats; restart drill; the existing tests on the cluster's CPUs; re-evaluate the stored 8×8 checkpoint</td><td>Throughput recorded and the cost model redone. The stored checkpoint reproduces 1,507 of 2,000</td><td>under 5</td></tr>
+    <tr><td>1 · Benchmark</td><td>A frozen benchmark whose properties are shown. No learner</td><td>Tensor simulator with tests against hand-worked cases and exact replays; map generators; the two scripted teams; calibration of batteries, radii and horizon; enumeration of small games to check the hand proofs; captures by an untrained team per grid size and team, split by whether the capturing drone had sensed the target and was moving</td><td>Scripted team captures at least 90%. One capturer: 0. Rechargers removed: 0; frozen: at most 5%. Observers' sensing is worth at least 10 points to the second scripted team. Random team at most 1%. Parameters, seeds and set hashes committed. Kill: no setting meets these, and the values go back to the PI</td><td>about 10</td></tr>
+    <tr><td>2 · Core on 8×8</td><td>The new lattice loses nothing on the measured task</td><td>First the old recipe unchanged on the cluster, with and without shared noise. Then one change per run: window with kept and bounded state, codes, battery input, staged search, credit orders. Arms: state without a bound, regrowing at every step, one channel per kind, greedy captures stored. Three seeds each, about 20 runs</td><td>The port's three-seed means lie within 5 points of the stored runs (75.4% with shared noise, 65.5% without). The new core, which has no shared noise, reaches at least 75% on never-posed tasks, passes the iteration gate and the strand gate. Kill: no arm passes the iteration gate</td><td>25 to 95</td></tr>
+    <tr><td>3 · Pursuit</td><td>Coordinated capture of a visible fleeing target on 12×12: 2 to 5 capturers, obstacles, roads, batteries, rechargers</td><td>The credit forms against the exact shares; one, two and n commit groups at equal iterations; block redraws on and off; staged search against no selection; the audit with identical strategies. About 12 runs</td><td>At least 60% with three capturers; one capturer alone exactly 0 on maps without dead ends. No kind with zero mean credit; the ghost drone passes in at most 2% of legs. Kill: under 30% after 600 rounds with every lever of §7 that needs no approval</td><td>70 to 300</td></tr>
+    <tr><td>4 · Hidden target</td><td>Scouting through the value of information: observers, 16×16, six drones</td><td>Target visible, hidden with observers, hidden without; observers with sensing withheld; cut before against after the draw; number of worlds; past window 3, 8, 16 and back-propagation span 2, 8, 16; the readout of the saved state. About 9 runs</td><td>Hidden reaches three quarters of visible. Withholding the observers' sensing costs at least 10 points. Kept strategies stay ahead on a further set of worlds. Kill: no observer effect; the question then goes back to the PI, and no scouting bonus is added</td><td>140 to 560</td></tr>
+    <tr><td>5 · Full scenario</td><td>24×24, ten drones, from scratch</td><td>Three seeds of the full recipe; the reach gate; all controls; review of 50 failed trajectories per run</td><td>At least 80% on validation, as a point estimate. Reach gate passed. Frozen rechargers at most 5%. Kill: under 40% after three full runs while the visible-target rate is at least 90%; the failed gate is reported and no heuristic is added</td><td>105 to 420</td></tr>
+    <tr><td>6 · Certification</td><td>A number that survives an audit</td><td>Protocol and set hashes committed first. Five seeds from scratch. 2,000 test episodes, the held-out map family, the hand-drawn maps, other flee rules, every control on identical seeds, compute sweeps, an independent re-implementation of the evaluator</td><td>The bar of §3 on the test set, with every control behaving as stated</td><td>175 to 700</td></tr>
+  </tbody>
+</table></div>
+<p>Together that is roughly 500 to 2,100 GPU-hours if 900 rounds per run suffice, which is 3 to 12 days of computing on seven H100s, spread over several weeks of experiments and analysis. Evaluation, controls and sweeps add about a tenth. Phases 5 and 6 grow in proportion to the number of rounds. Each run is sized to finish within hours.</p>
+<h3>Predicted failures and what they look like first</h3>
+<div class="scroll"><table class="wide">
+  <thead><tr><th>Failure</th><th>First sign</th><th>Response</th></tr></thead>
+  <tbody>
+    <tr><td>No reward for an untrained team at full scale</td><td>Fewer than 10 captured legs per 4,096 untrained clones in phase 1</td><td>The levers of §7 in order; the last two need approval</td></tr>
+    <tr><td>The team learns to wait for the target to walk into it</td><td>Captured legs in which the capturing drone never moved towards the target</td><td>Count such legs before trusting any early curve; nothing greedy is stored</td></tr>
+    <tr><td>Capturers chase one by one and never close from two sides</td><td>Harvested legs start within two cells of a capturer and stay there over rounds; one drone in the target's sight at capture</td><td>Block redraws and more strategies; two commit groups</td></tr>
+    <tr><td>Search keeps luck</td><td>The audit passes identical strategies; kept strategies do not stay ahead on a further set of worlds</td><td>More confirmation worlds, fewer strategies, at equal cost</td></tr>
+    <tr><td>The kept state drifts on long trunks</td><td>State pinned at its bound; capture rate falls with the number of the leg; plans change without new facts</td><td>More update noise; iteration counts redrawn more widely</td></tr>
+    <tr><td>Noisy credit brings back 'stand still'</td><td>Share of stay actions per kind rises; the ghost drone clears the threshold too often</td><td>More replays and orders; a higher threshold</td></tr>
+    <tr><td>Observers add nothing, or only herd</td><td>Withholding their sensing changes nothing</td><td>Check the value of information in the benchmark first; more harvest worlds. Never a coverage bonus</td></tr>
+    <tr><td>What was seen is forgotten once it leaves the window</td><td>Capturers return to cells just found empty; the readout loses the target a few steps after the sighting</td><td>Longer back-propagation span, longer past window, wider state</td></tr>
+    <tr><td>The reach gate fails</td><td>A sharp drop of capture rate with the distance of the first sighting</td><td>More iterations per step. Then coarser lattice levels, which need approval</td></tr>
+    <tr><td>Throughput far below the estimate</td><td>The arrival benchmark</td><td>Narrower rule and smaller dials; every budget rescaled before phase 2</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="cluster"><span class="sec">§14</span>Working on the cluster</h2>
+<p>No project code runs anywhere but on the H100 cluster and its CPUs <span class="tag d">decided</span>. That covers training, evaluation, unit tests, shape checks, benchmarks, analysis scripts and the drawing of result figures. The laptop holds the git working copy and is where ssh and git commands are issued, by a session attached to that folder; it runs nothing else. The assistant's cloud container edits text, builds this document and reads results; it executes no project code.</p>
+<ol>
+  <li><strong>Code moves by git only.</strong> A change is committed and pushed. On the cluster the exact commit is checked out into the directory of the run that uses it, so a run can always be traced to its source.</li>
+  <li><strong>Verification comes first and also runs on the cluster.</strong> Every increment starts with the test suite on the cluster's CPUs: simulator rules against hand-worked cases, tensor shapes, replays that must reproduce recorded episodes exactly, the text search and import check of §10, and the controls of §10 on the scripted teams.</li>
+  <li><strong>Jobs never depend on the connection.</strong> They are submitted to the scheduler and outlive the ssh session. Each job writes a small status file every minute (time, round, metrics, restart count), appends to a log, saves a checkpoint every 5 to 10 minutes by writing and renaming, and resumes from the latest checkpoint when it is restarted.</li>
+  <li><strong>Reading results costs one ssh call.</strong> Status files, metric tables and text renderings of trajectories are read directly. Figures and trajectory files that should be kept are committed on the cluster and come back through git, which needs push rights there.</li>
+  <li><strong>Every experiment has a card in the repository</strong> before it starts: the hypothesis, what would count as support and as refutation, the commit, the configuration, and afterwards the result and the decision taken. One experiment is one committed configuration and at most a few hours on the available GPUs. Failure analysis looks at trajectories, not at one number.</li>
+  <li><strong>Search and learning are separate processes,</strong> one search worker per GPU and one learner. Workers read weights from a file the learner replaces atomically, and write harvested legs as small records (§9). This survives restarts and scales with the number of GPUs.</li>
+</ol>
+<p>Two files for the first session exist and have not been executed anywhere: <code>nca_drones/cluster/probe.sh</code> reports what the cluster offers without changing anything, and <code>nca_drones/cluster/bench_rule.py</code> measures the rule's throughput in three numeric formats.</p>
+
+
+<h2 id="decisions"><span class="sec">§15</span>Open decisions</h2>
+<p>Each row is a choice that changes what the result means or departs from "general mechanisms only". The proposal is the recommended choice. Nothing that depends on a row is built before the PI has decided it; the last column names the phase that waits for it.</p>
+<div class="scroll"><table class="wide">
+  <thead><tr><th>Decision</th><th>Options</th><th>Proposal and reason</th><th>Before</th></tr></thead>
+  <tbody>
+    <tr><td>Cluster and connection</td><td>Session attached to the laptop folder, ssh from there; or a session on the laptop</td><td>Either. Needed: ssh alias, scheduler, number of H100s and for how long, working directory, whether the cluster reaches GitHub and PyPI and may push</td><td>Phase 0</td></tr>
+    <tr><td>Tools on the benchmark side</td><td>Allowed outside the learner; or certify by controls alone</td><td>Allowed: connectivity check; shortest-path detour measure; a scripted team that always sees the target, for admission and as a reference; a second one that acts on what was sensed, for calibrating radii; enumeration of small games; a readout of the target's cell fitted afterwards. The learner imports none of it</td><td>Phase 1</td></tr>
+    <tr><td>Flee and wander rule, sight, metric</td><td>The rule of §3; a rule that looks further ahead; sight blocked by obstacles</td><td>§3: one step ahead, greatest distance to the nearest drone seen, staying allowed, two cells of sight through obstacles, Manhattan distances. Blocked sight would let one capturer ambush and would void the coordination proof</td><td>Phase 1</td></tr>
+    <tr><td>A drone with an empty battery</td><td>Removed; or immobile and revivable by a recharger on its cell</td><td>Removed. An immobile capturer would still scare the target and could still capture, which voids the recharge certificate</td><td>Phase 1</td></tr>
+    <tr><td>How 'requires a recharge' is certified</td><td>Target farther than twice each capturer's initial charge; or a target that appears after one battery life; or the frozen-recharger control alone</td><td>Distance against initial charge. It is arithmetic, it forces the recharge through pursuit instead of waiting, and it covers the gathered start with full batteries as well as the spread start with random levels</td><td>Phase 1</td></tr>
+    <tr><td>What counts as coordination; dead ends</td><td>Any two drones in the target's sight, or two capturers. Dead ends removed in evaluation only, or in training too</td><td>Any two drones: it follows from 'flees any drone it sees', and results are reported split by who was in sight. Dead ends removed in evaluation only</td><td>Phase 1</td></tr>
+    <tr><td>A training target that is not captured</td><td>Moves to a new random cell after 48 steps; or stays until the episode is reset</td><td>Moves. Otherwise one unreachable target blocks an episode</td><td>Phase 1</td></tr>
+    <tr><td>Starting values</td><td>Sight and sensing 2 / 3 / 5 / 2 cells; batteries 12 and 24; horizon up to 128; at most 16 drones</td><td>Calibrated in phase 1 without a learner, then frozen</td><td>End of phase 1</td></tr>
+    <tr><td>The bar</td><td>Point estimate of 80%, or lower 95% bound at 80%; one training seed or five; held-out maps inside the bar or beside it</td><td>§3: lower bound at 80% over five seeds on new maps of the training families; held-out family and hand-drawn maps beside it at 60%. The 8×8 run met its 75% bar as a point estimate (82.0% on 200 tasks) and missed it as a lower bound (73.4% on 2,000)</td><td>End of phase 1</td></tr>
+    <tr><td>Changing the benchmark after training has started</td><td>Only with approval, as a new version on which earlier results are reported again; or never</td><td>Only with approval</td><td>Phase 2</td></tr>
+    <tr><td>Search from saved simulator states</td><td>Cuts, trunks that continue from kept clones, replays with drones at random, runs with a drone's sensing withheld; or none of these</td><td>Allowed. It is rollout search with returns counted in the simulator: no value table, no backup, no knowledge of the task</td><td>Phase 2</td></tr>
+    <tr><td>Unit of selection and preference for speed</td><td>Leg with γ = 0.97; capture within the leg limit without γ; whole episode</td><td>Leg with γ. The 8×8 runs kept the earliest rewarded rollout, which ranks plans the same way</td><td>Phase 2</td></tr>
+    <tr><td>Exploration noise held over several steps</td><td>Allowed as a listed prior with a single-step arm; or single-step noise only</td><td>Allowed: it is in the measured recipe</td><td>Phase 2</td></tr>
+    <tr><td>Training mixture</td><td>Grid sides 12, 16, 24 and varied teams, uniformly; or the full scenario only</td><td>The mixture</td><td>Phase 3</td></tr>
+    <tr><td>Imitation weights under a hidden target</td><td>Mean return over indistinguishable worlds, failures included; or own-world return only</td><td>Mean over indistinguishable worlds: without it a way of searching earns nothing where it found nothing</td><td>Phase 4</td></tr>
+    <tr><td>Levers held back</td><td>A target that sometimes fails to move or sees less far (reopens the decision on target speed, for training); a noise field the lattice can see, or shared noise; coarser lattice levels; a forecast of the target, or state that does not slide</td><td>None is in the design. Each would be asked for separately, with the measurement that makes the case</td><td>When a gate fails</td></tr>
+  </tbody>
+</table></div>
+<footer>
+  <p>Measured numbers come from the 8×8 experiments in the repository (<code>nca_drones/README.md</code>, <code>nca_drones/results/</code>). This version was written after a literature sweep, a panel of five independent designs with adversarial reviews and a judge, and a second review of this text. Most literature claims could not be checked against the primary source, and none of them is relied on for a number here. Version 1 of this page is kept in the repository as <code>nca_drones/docs/unified_wavefront_design.html</code>.</p>
+</footer>
+
+</div>
+</body></html>
