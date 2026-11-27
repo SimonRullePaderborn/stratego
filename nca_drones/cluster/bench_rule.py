@@ -1,18 +1,24 @@
 """Throughput of the lattice rule on this machine.  RUN ON THE CLUSTER ONLY.
 
-    python3 nca_drones/cluster/bench_rule.py --out nca_drones/results/bench/$(hostname).json
+    python3 nca_drones/cluster/bench_rule.py --out nca_drones/results/bench/h100.json
 
 It times the local rule (3x3x3 convolution, two 1x1x1 layers, residual state, per-voxel normalisation) for the
 lattice shapes the programme needs, without gradient (search) and with back-propagation (learning), in three
 numeric formats and two memory layouts.  The number that matters is voxel-iterations per second: it replaces the
-unmeasured estimate (100-400 million per H100) that the design document uses for its cost model.
+unmeasured estimate that the design document uses for its cost model.
+
+The rule timed here is a stand-in with the structure of the old 8x8 rule: its input channels pass through the
+3x3x3 convolution at every iteration.  The rule of design version 2 pays for its inputs once per step, so its
+throughput is about the figure of the row "24x24 proposed rule" times 241,664 / 131,072 = 1.84 (PROGRAMME.md,
+section 10, step 5).
+
+The output file holds no host name, so that it can be committed.
 
 Nothing here imports project code, so it can run before anything else is ported.
 """
 import argparse
 import json
 import os
-import platform
 import time
 
 import torch
@@ -113,7 +119,7 @@ def main():
     torch.backends.cudnn.allow_tf32 = True
 
     meta = {
-        "host": platform.node(), "torch": torch.__version__, "cuda": torch.version.cuda,
+        "torch": torch.__version__, "cuda": torch.version.cuda,
         "cudnn": torch.backends.cudnn.version(), "device": str(dev),
         "gpu": torch.cuda.get_device_name(dev) if dev.type == "cuda" else None,
         "cpus": os.cpu_count(), "threads": torch.get_num_threads(), "iters": args.iters,

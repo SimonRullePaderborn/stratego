@@ -138,8 +138,11 @@ What follows from it:
 
 ### 4.2 What the learner may contain
 
-This is the bitter-lesson contract of design section 4. "The learner" is every file that takes part in acting,
-search, credit and learning. The simulator and the benchmark-side tools are not the learner.
+This is the bitter-lesson contract of design section 4. The code has three parts. The environment is the
+simulator and the map generator (`wf/sim.py`, `wf/maps.py`). The learner is every file that takes part in
+acting, search, credit and learning (the other files of `wf/`). The benchmark side (`bench/`, not written yet)
+holds everything that knows something about solutions; it may import the other two and is never imported by
+them.
 
 1. No domain concept in the learner. Distance, meeting, escort, pincer, sweep, low battery, sighting and role
    are not named anywhere in it. This is checked by a text search of the learner's source. The one exception,
@@ -152,9 +155,12 @@ search, credit and learning. The simulator and the benchmark-side tools are not 
    mixture over grid sizes and team sizes.
 5. Every prior that remains is written down with the test that could remove it (design section 12).
 6. The benchmark may know what the learner may not (still needs the PI's approval, decision O2 in section 6):
-   shortest paths, connectivity checks and scripted reference teams exist only in the generator and the
-   evaluator. Nothing they compute reaches the learner as an input, as a filter on training tasks or as a
-   training signal, and the learner's code imports none of theirs.
+   shortest paths, scripted reference teams and certificates exist only in the generator of the evaluation
+   sets and in the evaluator. Nothing they compute reaches the learner as an input, as a filter on training
+   tasks or as a training signal, and the learner's code imports none of theirs. One check does touch
+   training and is part of O2: every generated map, training maps included, is tested for connected free
+   space and connected roads, and a map that fails is drawn again. That check is a property of a valid map,
+   belongs to the environment and lives with the map generator.
 
 Standing constraints from the 8x8 phase, all still in force: only reward and a simulator; only learning and
 search; no solver, no dynamic programming, no value-iteration network in disguise; tubes in a (t, x, y)
@@ -172,6 +178,8 @@ afresh, replaying a leg with some drones acting at random, and running a leg wit
 * Work only in `nca_drones/`, only on the branch `claude/nca-drone-coordination-d2k5kw`. No pull request unless
   the PI asks for one.
 * Code moves by git only. A run uses a committed state, and its card names the commit.
+* The repository's ignore lists hide `runs/`, any `run.sh`, and every file or folder whose name starts with
+  `data`, `local`, `checkpoints` or `exps`. Files that must be committed get other names.
 * No personal data in file names, job names, logs that are committed, or requests to outside services. Raw
   cluster probe output holds account and host names and is not committed; its facts go into the card.
 * Every number is reported with how it was obtained: measured (on what, how many episodes, which interval),
@@ -333,17 +341,17 @@ proposals" accepts all of them.
 | No. | Decision | Proposal and reason | Needed before |
 |---|---|---|---|
 | O1 | Cluster facts: ssh alias, scheduler, number of H100s and for how long, working directory, whether the cluster reaches GitHub and PyPI and may push | `cluster/probe.sh` answers most of it in one run | Phase 0 |
-| O2 | Tools on the benchmark side, never imported by the learner | Allowed: connectivity check; shortest-path detour measure; a scripted team that always sees the target, for admitting instances and as a reference; a second one that acts on what was sensed, for calibrating radii; enumeration of small games; a readout of the target's cell fitted afterwards on saved states | Phase 1, step 5 |
-| O3 | What a drone with an empty battery can still do | It cannot sense or capture, and the target ignores it. An empty capturer that could still capture would void the recharge certificate | Freezing the benchmark |
-| O4 | Flee and wander rule, sight, metric | As in section 5.2: one step ahead, greatest distance to the nearest drone seen, staying allowed, two cells of sight through obstacles, Manhattan distances. Blocked sight would let one capturer ambush and would void the coordination proof | Freezing the benchmark |
+| O2 | Tools on the benchmark side, never imported by the learner | Allowed: shortest-path detour measure; a scripted team that always sees the target, for admitting instances and as a reference; a second one that acts on what was sensed, for calibrating radii; enumeration of small games; a readout of the target's cell fitted afterwards on saved states. Also allowed, in the map generator: a connectivity check on every generated map, training maps included | Phase 1, step 5 |
+| O3 | What a drone with an empty battery can still do | It cannot sense or capture, and the target ignores it. An empty capturer that could still capture would void the recharge certificate | Phase 1, step 5 |
+| O4 | Flee and wander rule, sight, metric | As in section 5.2: one step ahead, greatest distance to the nearest drone seen, staying allowed, two cells of sight through obstacles, Manhattan distances. Blocked sight would let one capturer ambush and would void the coordination proof | Phase 1, step 5 |
 | O5 | How "requires a recharge" is certified | Target farther than twice each capturer's initial charge. It is arithmetic, it forces the recharge through pursuit instead of waiting, and it covers both start layouts | Phase 1, step 8 |
 | O6 | What counts as coordination; dead ends | Any two drones in the target's sight count, and results are reported split by who was in sight. Dead ends are removed in evaluation maps only | Phase 1, step 8 |
-| O7 | A training target that is not captured | It moves to a new random cell after 48 steps. Otherwise one unreachable target blocks an episode | Phase 2 |
+| O7 | A training target that is not captured | It moves to a new random cell after 48 steps. Otherwise one unreachable target blocks an episode | Phase 1, step 10 |
 | O8 | Starting values: sight and sensing 2 / 3 / 5 / 2 cells, batteries 12 and 24, horizon up to 128, at most 16 drones | Calibrated in phase 1 without a learner, then frozen | End of phase 1 |
 | O9 | The bar | Lower 95% bound at 80% over five seeds on new maps of the training families; held-out family and hand-drawn maps beside it at 60%. For comparison: the 8x8 run met its 75% bar as a point estimate and missed it as a lower bound | End of phase 1 |
 | O10 | Changing the benchmark after training has started | Only with approval, as a new version on which earlier results are reported again | Phase 2 |
 | O11 | Imitation weights under a hidden target | Mean return over the worlds the team cannot tell apart, failures included. Without it a way of searching earns nothing where it found nothing | Phase 4 |
-| O12 | The strand gate (new, see section 18) | A common target that stays after a capture; success means every seeker has stood on it. This is the probe that measured 34% on 8x8. A target per seeker would need an input that says whose target a cell is, which the design does not have | Phase 2 |
+| O12 | The strand gate (new, see section 18) | A common target that stays after a capture; success means every seeker has stood on it. This is the probe that measured 34% on 8x8. A target per seeker would need an input that says whose target a cell is, which the design does not have. The gate is measured on one extra run that is trained with one to five seekers (section 12.4) | Phase 2 |
 | O13 | Baselines (proposed in discussion, never decided) | Recurrent MAPPO and QMIX on the phase 3 and phase 5 benchmarks, at equal GPU-hours and with the same pooled information as the lattice. They cost about as much again as the phase's own runs | Phase 3 |
 | O14 | Levers held back: a target that sometimes fails to move or sees less far in training; a noise field the lattice can see, or noise shared between drones; coarser copies of the lattice; a forecast of the target, or state that does not slide with the window | None is in the design. Each would be asked for separately, with the measurement that makes the case | When a gate fails |
 
@@ -409,6 +417,10 @@ every step t
     clamp the observation into the present slice
     run the rule k_s times                                  k_s = 4
 ```
+
+The pseudo-code names the simulator loosely. The real calls are `sim.peek(cfg, st)`, which returns the cells
+for all drones and all actions at once as [B, N, 5, 2]; `sim.step(cfg, st, actions)`, which returns the next
+state and, per episode, whether the target was captured; and `sim.observe(cfg, st)` for the observation.
 
 There is no order among drones. One step costs k_s iterations whatever the size of the team. The lattice keeps
 its state from step to step. When evaluating there is one lattice, no noise and no search. Commit groups (a
@@ -518,6 +530,11 @@ for each batch of 64 harvested legs, with iteration counts redrawn
 | Batch; learning rate | 64 legs; 0.001 falling to 0.0002 |
 | Rounds per run | 900, carried over from the 8x8 runs; to be set again after a 25-round take-off test |
 
+The take-off test is 25 rounds of a run's full configuration before the run itself. It measures the seconds
+per round and the peak memory, and it passes when at least one cut has a confirmed strategy in the last ten
+rounds and the training loss falls. If it fails, the full run is not started: that is the first failure of
+section 16. The measured time per round then decides how many rounds the run can afford.
+
 ## 8. Starting in a new environment
 
 ### 8.1 What the PI does once
@@ -547,8 +564,10 @@ for each batch of 64 harvested legs, with iteration counts redrawn
    directory with at least 50 GB of space, whether the cluster reaches github.com and pypi.org, and any site
    rule such as "no computing on login nodes". What you do not know, `cluster/probe.sh` finds out.
 4. **How the cluster gets the code** (section 9.2). If the cluster reaches GitHub and the repository is
-   public, nothing is needed. If the repository is private, either give the cluster a deploy key, or use the
-   second route of 9.2, which needs no GitHub access from the cluster at all.
+   public, nothing is needed. If the repository is private, either give the cluster a deploy key (an ssh key;
+   the clone then uses the address `git@github.com:SimonRullePaderborn/stratego.git`, and pushing results from
+   the cluster needs a key with write access), or use the second route of 9.2, which needs no GitHub access
+   from the cluster at all.
 5. **The open decisions** O2 to O7 of section 6.2, which phase 1 needs. "Use the proposals" is a valid answer.
 6. Optionally the safeguard of section 8.3.
 7. Start the session (8.2) and paste the message (8.4).
@@ -574,7 +593,8 @@ on the cluster do not depend on it.
 ### 8.3 Optional safeguard on the Mac
 
 A permission file can make the session refuse the most likely slip, a direct `python3` call on the Mac. Create
-`.claude/settings.local.json` in the folder you open as the project folder, with this content:
+`stratego/.claude/settings.local.json`, at the root of the repository whichever folder you open, with this
+content:
 
 ```json
 {
@@ -593,8 +613,9 @@ What this is and is not, from the same documentation: deny rules win over allow 
 inside compound commands. They match the command text only, so they do not catch `/usr/bin/python3`,
 `bash -c "python3 ..."`, `python3.11`, a script that starts Python, or a git hook. They are a guard against
 slips and not a wall. They do not block `ssh h100 'python3 ...'`, which is exactly what is wanted; that last
-point is inferred from the documentation and not stated in it, so check it with the first ssh command. In the
-desktop app, `/status` shows whether the file was loaded.
+point is inferred from the documentation and not stated in it, so check it once with
+`ssh h100 'python3 --version'`, which must run. In a terminal session `/status` lists the settings files that
+were loaded; for the desktop app this is not confirmed.
 
 ### 8.4 The first message for the new session
 
@@ -678,7 +699,8 @@ waits in a loop on the Mac: a job is submitted, and its state is looked at later
 ### 9.4 Jobs
 
 The templates assume Slurm, which is the most common scheduler on GPU clusters. The probe shows whether that is
-right. Flags differ between sites: some want `--gpus=1` or `--gres=gpu:h100:1`, some need `--account`.
+right. Flags differ between sites: some want `--gpus=1` or `--gres=gpu:h100:1`, some need `--account`. The
+`srun` lines in this file carry no `--mem`; add one where the site's default memory is small.
 
 A one-line job:
 
@@ -742,7 +764,7 @@ substitute for running the tests.
 ### 9.7 Documents
 
 The design page is rebuilt on the cluster with
-`cd nca_drones/docs && ~/wf/venv/bin/python3 build_design_page_v2.py wavefront_v2_design.html --standalone`
+`ssh h100 'cd ~/wf/stratego/nca_drones/docs && ~/wf/venv/bin/python3 build_design_page_v2.py wavefront_v2_design.html --standalone'`
 (standard library only) and committed. Without `--standalone` the script writes the page body alone, which is
 what the published copy is made from; only an assistant session can republish it, by reading the published
 page first and then publishing to the same address.
@@ -760,8 +782,10 @@ Nothing is trained. Card: `experiments/2026-11-27-p0-arrival.md`. Budget: under 
 ssh h100 'mkdir -p ~/wf/logs && cd ~/wf && git clone --branch claude/nca-drone-coordination-d2k5kw https://github.com/SimonRullePaderborn/stratego.git && git -C stratego log --oneline -1'
 ```
 
-Expected: the last line shows the same commit as `git log --oneline -1` on the Mac. With the second route,
-use the four commands of 9.2.
+Expected: the last line shows the same commit as `git log --oneline -1` on the Mac. With a deploy key,
+replace the https address by `git@github.com:SimonRullePaderborn/stratego.git`; the https address cannot ask
+for a password over a non-interactive ssh call and fails on a private repository. With the second route, use
+the four commands of 9.2.
 
 **Step 3. Probe.** It only reads; it changes nothing.
 
@@ -783,8 +807,12 @@ ssh h100 'srun --partition=<gpu partition> --gres=gpu:1 --time=00:05:00 ~/wf/ven
 ```
 
 Expected: a version and a CUDA version from the first call; `True`, a count and an H100 name from the second.
-PyTorch 2.15.0 is the version that produced the stored 8x8 numbers; if it cannot be installed for the cluster's
-Python, take the newest one and record it. The code needs nothing beyond PyTorch, NumPy and, for the old
+If the second call prints `False`, the installed build does not fit the cluster's GPU driver; install the
+build the site recommends and record it. PyTorch 2.15.0 is the version that produced the stored 8x8 numbers.
+It needs Python 3.11 or newer, and the probe of step 3 prints the cluster's version. If `python3` is older,
+build the environment with a newer interpreter from the site's modules or conda before falling back to
+another PyTorch version, because another version removes the expectation of step 7 that the counts match
+exactly. If 2.15.0 cannot be installed at all, take the newest one and record it. The code needs nothing beyond PyTorch, NumPy and, for the old
 plotting scripts, Matplotlib. If the site provides Python or PyTorch through environment modules or conda,
 build the environment with those instead; what matters is that `~/wf/venv/bin/python3` exists, or that the
 commands of this file are adapted to the other path. If PyPI cannot be reached, stop and report; the way
@@ -842,21 +870,24 @@ Gate. With the same PyTorch version the counts should match exactly. On another 
 few tasks can flip through rounding; the two numeric formats already differ by up to five tasks in 2,000 in
 the stored output. Proposed tolerance: the closed-loop count on the 2,000 new tasks lies within 10 of the
 stored one in both formats, and the difference is recorded. A larger gap is a failed gate to be understood,
-not explained away. The run time of this step is not known; the limit of three hours is a guess.
+not explained away. On the machine of the stored runs one such evaluation took about 30 minutes, judging by
+file times; the limit of three hours for the two is generous.
 
 **Step 8. Restart drill.** A short job of the old trainer is stopped and continued, to learn how the scheduler
 behaves before a long run depends on it:
 
 ```
-~/wf/venv/bin/python3 train.py --name p0_drill --seed 0 --strict 1 --hind 0 --prune 0 --null_k 8 --shared 0.5 --ez 4 --eps_max 0.3 --prefix 0.6 --hard_frac 0.25 --rounds 120 --eval_closed 100 --eval_every 20 --threads 2 --lr_final 0.2
+ssh h100 'cd ~/wf/logs && sbatch --job-name=p0-drill --partition=<cpu partition> --cpus-per-task=2 --mem=8G --time=01:00:00 --output=%x-%j.out --wrap "cd ~/wf/stratego/nca_drones && ~/wf/venv/bin/python3 train.py --name p0_drill --seed 0 --strict 1 --hind 0 --prune 0 --null_k 8 --shared 0.5 --ez 4 --eps_max 0.3 --prefix 0.6 --hard_frac 0.25 --rounds 120 --eval_closed 100 --eval_every 20 --threads 2 --lr_final 0.2"'
 ```
 
-Submit it as a CPU job from `~/wf/stratego/nca_drones`. When `runs/p0_drill/log.jsonl` shows round 40, cancel
-the job (`scancel <job id>`), then submit the same command with `--resume runs/p0_drill/ckpt.pt` added. The
-resumed job must start at round 41 and reach round 119; rounds that ran between the checkpoint and the cancel
-appear twice in the log. The old trainer does not save its replay buffer, so this tests the mechanics of
-stopping and continuing and not exact resumption; the new trainer has to save everything it needs (section
-12.3).
+The trainer writes its checkpoint `runs/p0_drill/ckpt.pt` at rounds 0, 20, 40, 60, 80 and 100. Cancel the job
+at any time after round 40 has appeared in `runs/p0_drill/log.jsonl` (`scancel <job id>`), then submit the
+same line again with `--resume runs/p0_drill/ckpt.pt` added at the end of the python command. The first new
+log line of the resumed job must carry the round after the last checkpoint: 41 if the cancel came before
+round 60, 61 if it came between rounds 60 and 79, and so on. The job must then reach round 119. Rounds that
+ran between that checkpoint and the cancel appear twice in the log. The old trainer does not save its replay
+buffer, so this tests the mechanics of stopping and continuing and not exact resumption; the new trainer has
+to save everything it needs (section 12.3).
 
 **Step 9. The cost model again.** With D from step 5, on one GPU: seconds per round = 6 x 10^10 / D, and
 GPU-hours for a 900-round run at full scale = 1.5 x 10^10 / D (136 hours at 110 million, 34 hours at 440
@@ -872,7 +903,7 @@ is inside its tolerance.
 ## 11. Phase 1: the benchmark
 
 **Goal.** A frozen benchmark whose properties are shown, without any learner. Budget: about 10 GPU-hours.
-Steps 1 to 4 need no decision. Steps 5 to 10 wait for the decisions O2 to O7.
+Steps 1 to 4 need no decision. Steps 5 to 10 wait for the decisions O2 to O7; step 10 also needs O8 and O9.
 
 ### 11.1 Step 1: the first run of the simulator tests
 
@@ -957,23 +988,26 @@ one directory name:
 
 | File | Content |
 |---|---|
-| `bench/graph.py` | `connected(mask)`; `distances(free, source)`, the breadth-first distances on free cells; `detour(free, a, b)`, path distance minus Manhattan distance; `remove_dead_ends(obstacle, road)` by the rule of section 5.2 |
+| `bench/graph.py` | `distances(free, source)`, the breadth-first distances on free cells; `detour(free, a, b)`, path distance minus Manhattan distance; `remove_dead_ends(obstacle, road)` by the rule of section 5.2 |
 | `bench/scripted.py` | The two scripted teams (step 9) |
 | `bench/enumerate_small.py` | Enumeration of small games (step 7) |
 | `bench/make_sets.py` | The validation and test sets with their certificates and hashes (step 8) |
 | `bench/controls.py` | The control variants of an episode (section 14.2) |
+| `bench/evaluate.py` | Evaluation of a scripted team or, later, of a checkpoint on a stored set, with an optional control; counts with intervals and paired differences (section 14.1) |
 | `bench/test_bench.py` | Hand-worked cases for all of the above |
 
-Two additions to `wf/sim.py` are needed for controls and belong to this step, each with a test: a setting
-that switches refills off, and, only if O4 is decided that way, sight blocked by obstacles.
+Additions to the environment that belong to this step, each with a test: in `wf/sim.py` a setting that
+switches refills off and, only if O4 is decided that way, sight blocked by obstacles; in `wf/maps.py` a
+`connected(mask)` check by flood fill, for the map families of step 6.
 
 ### 11.6 Step 6: the other map families
 
 The existing generator is one family: a road network with loops and spurs, and rectangular obstacles that
 keep one cell of distance from each other and from the border. Its guarantees hold by construction. The
 other planned families (city blocks with alleys, braided mazes, and a fourth that is never trained on) cannot
-be built that way; they generate, check connectivity with `bench/graph.py`, and reject. Each family gets its
-own block of seeds. Per family and grid side, phase 1 measures the share of free cells, the share of road
+be built that way; they generate, check connectivity, and draw again when the check fails. They live in
+`wf/maps.py` with the connectivity check of step 5, because training needs them and `wf/` must not import
+`bench/`. Each family gets its own block of seeds. Per family and grid side, phase 1 measures the share of free cells, the share of road
 cells, and how far a free cell lies from the nearest road; the last value is fixed when the benchmark is
 frozen. Twenty maps are drawn by hand as text files in the renderer's format.
 
@@ -1002,7 +1036,8 @@ for each map seed in the set's block
                      free cells exceeds the Manhattan distance by 4 or more
         if none is left: draw the layout again and count the redraw
         target = one of the kept cells, drawn uniformly; world seed = drawn once and stored
-        admit the episode if the first scripted team captures in at least 1 of 16 attempts
+        admit the episode if the first scripted team captures in at least 1 of 16 attempts;
+            the attempts use the world seeds stored seed + 0 ... 15, and the first is the episode's own
 ```
 
 With full batteries of 12 the target must be more than 24 cells from all five capturers, so a gathered start
@@ -1064,6 +1099,7 @@ set -euo pipefail
 name=$1; seed=$2; shared=$3
 py=~/wf/venv/bin/python3
 cd ~/wf/runs/p2a/nca_drones
+if [ -e runs/$name/log.jsonl ]; then echo "runs/$name exists already; use a new name"; exit 1; fi
 $py train.py --name $name --seed $seed --strict 1 --hind 0 --prune 0 --null_k 8 --shared $shared --ez 4 \
     --eps_max 0.3 --prefix 0.6 --hard_frac 0.25 --rounds 1500 --eval_closed 100 --eval_every 50 \
     --threads 2 --lr_final 0.2 &
@@ -1073,7 +1109,8 @@ until grep -q '"round": 900,' runs/$name/log.jsonl 2>/dev/null; do
     sleep 30
 done
 cp runs/$name/best.pt runs/$name/best_r900.pt
-kill $pid
+kill $pid 2>/dev/null || true
+wait $pid 2>/dev/null || true
 mkdir -p results/p2a
 $py analyze.py runs/$name/best_r900.pt --prereg --out results/p2a/$name.json | tee results/p2a/$name.out
 cp runs/$name/log.jsonl results/p2a/$name.log.jsonl
@@ -1082,9 +1119,18 @@ mkdir -p ~/wf/stratego/nca_drones/results/p2a
 cp results/p2a/$name.* ~/wf/stratego/nca_drones/results/p2a/
 ```
 
-Each job needs 2 CPU cores and, on the machine that produced the stored runs, took about 8 seconds per round,
-so about two and a half hours plus the evaluation. `runs/` is ignored by git; what is kept goes to
-`results/p2a/` and is copied into the main clone, where it is committed.
+The script is committed as `cluster/jobs/p2a_old_recipe.sh`, the worktree is made with
+`git -C ~/wf/stratego worktree add --detach ~/wf/runs/p2a <commit>`, and each of the six jobs is submitted
+like this one:
+
+```
+ssh h100 'cd ~/wf/logs && sbatch --job-name=p2a_shared_s0 --partition=<cpu partition> --cpus-per-task=2 --mem=8G --time=05:00:00 --output=%x-%j.out ~/wf/runs/p2a/nca_drones/cluster/jobs/p2a_old_recipe.sh p2a_shared_s0 0 0.5'
+```
+
+The trainer appends to its log, so a name is used once; the script refuses a name whose log exists. Each job
+needs 2 CPU cores and, on the machine that produced the stored runs, took about 8 seconds per round, so about
+2.3 hours for 900 rounds plus about half an hour for the evaluation. `runs/` is ignored by git; what is kept
+goes to `results/p2a/` and is copied into the main clone, where it is committed.
 
 Gate: the three-seed mean of the closed-loop rate on the 2,000 never-posed tasks lies within 5 points of the
 stored run, 75.4% with shared noise and 65.5% without. Report also whether seed 0 reproduces the stored run
@@ -1102,13 +1148,17 @@ The old task, expressed with `wf/sim.py`, so that the new core is measured on th
 | A target that does not move and is known from the start | `p_move = 0.0`; `sense = (14, 14, 14)`, so every cell is always sensed |
 | Reward when the seeker stands on the target | Capture |
 | Horizon 20 | A leg limit of 20 steps; `T = 20` |
-| Tasks: three distinct random cells, filtered to be solvable; success is measured on tasks whose target is more than 5 cells from the seeker | The same task lists, produced by a small benchmark-side script that imports the old sampler (`env.sample_tasks`, `analyze.fresh_tasks`) and writes them to a file |
+| Tasks: three distinct random cells, filtered to be solvable; success is measured on tasks whose target is more than 5 cells from the seeker | The same tasks, drawn with the old sampler (`env.sample_tasks`) by a small benchmark-side script |
 
 The target is placed by setting the state's target cell directly, as the test helper `world` in
 `wf/test_sim.py` does. Evaluation sets are the old ones: the 200-task test set (seed 12345), the validation
 set (seed 999, the first 100 for choosing the checkpoint) and the 2,000 new tasks (seeds 2001 to 2010) with
-every task removed that the run itself posed in training. The trainer therefore records the tasks it poses,
-with the key of `train.task_key`.
+every task removed that the run itself posed in training. The test and validation lists are written to a
+file once. The list of 2,000 new tasks cannot be written in advance: `analyze.fresh_tasks` replaces every
+task that the run posed by later draws, so the list is made per run after training, from that run's record
+of posed tasks (the function reads the record from `analyze.load.posed`, which the script has to set). The
+trainer therefore records the tasks it poses, with the key of `train.task_key`, and it never poses a task of
+the validation or test sets, as the old trainer did not.
 
 Nothing is hidden in this task, so every world is the same. The general search code is used with
 W1 = W2 = W3 = 1, not a special case: the confirmation test then has a standard error of zero and reduces to
@@ -1142,9 +1192,10 @@ gets GPU time. Shapes are given with the batch first.
 **`wf/inputs.py`: from an observation to the input channels.**
 
 * `draw_codes(B, N, gen)`: for every episode, N distinct channel numbers out of 16.
-* `present_slice(cfg, obs, codes)`: [B, 68, H, W] from `sim.observe`. Channels: 0 obstacle, 1 road, 2 sensed,
-  3 target found, 4 to 19 capturer codes, 20 to 35 recharger codes, 36 to 51 observer codes, 52 to 67 battery
-  level times code. Drones on one cell add up. A slot without a drone adds nothing.
+* `present_slice(cfg, st, obs, codes)`: [B, 68, H, W]. Obstacle and road come from the state, everything else
+  from `sim.observe`. Channels: 0 obstacle, 1 road, 2 sensed, 3 target found, 4 to 19 capturer codes, 20 to
+  35 recharger codes, 36 to 51 observer codes, 52 to 67 battery level times code. Drones on one cell add up.
+  A slot without a drone adds nothing.
 * Switches for the arms: battery channels zeroed; one channel per kind instead of codes.
 * Tests: a hand-made state with two drones on one cell, an empty drone and an unused slot gives exactly the
   expected channels.
@@ -1156,6 +1207,9 @@ gets GPU time. Shapes are given with the batch first.
   the cell each action leads to (`sim.peek`). An impossible move leads to the drone's own cell and so scores
   like staying.
 * `advance(rule, cfg, st_next, lattice, k_s)`: slide, clamp, k_s iterations.
+* `run_greedy(rule, cfg, st, steps)`: the closed loop with one lattice, no noise and no search, until capture
+  or the step limit. The trainer uses it on validation episodes; `bench/evaluate.py` uses it for everything
+  else.
 * Tests: with tubes set by hand along a path, a drone follows the path; two drones with different codes
   follow two different paths.
 
@@ -1184,10 +1238,12 @@ not depend on the scores.
   the sensed mask, the target's cell if found), and for the leg the credits and weights. A record is a few
   tens of kilobytes. (The design page proposed to store seeds and actions and to regenerate observations;
   storing observations is simpler and equally exact.)
+* A switch that also stores the greedy rule's captures (arm 5 of section 12.4).
 * Memory: one clone at 24x24 holds roughly 10 to 15 MB (state, inputs, the encoded inputs and the hidden
-  layer; an estimate). A cut for 32 trunks at once would be about 6,900 clones, more than one 80 GB card
-  holds, so cuts are processed for a few trunks at a time. The chunk size is set from the measured peak
-  memory.
+  layer; an estimate). The three stages run one after the other. The largest, the screen, holds 32 x 128 =
+  4,096 clones for 32 trunks, about 40 to 60 GB before temporaries. Whether that fits on one 80 GB card is
+  open, so the code processes a cut for a chunk of trunks at a time, and the chunk size is set from the
+  measured peak memory.
 * The standing audit of selection (section 14.3) is part of this file.
 * Tests: with scores fixed by hand, the numbers of clones and their indices are as stated; identical
   strategies give d = 0 and are not kept; a hand-made table of values passes and fails the test as computed
@@ -1200,7 +1256,9 @@ not depend on the scores.
   With n = 10, K = 8, R = 2 and 8 worlds that is 1,408 simulator clones per kept leg.
 * `sensing_shares`: the second test, lattice runs with one drone's `sense_on` switched off.
 * `combine`: the mean share per drone over orders and worlds, its standard error over worlds, and the
-  threshold. The starting multiple is 2 standard errors, to be set by the ghost audit.
+  threshold. The starting multiple is 2 standard errors, to be set by the ghost audit. With one harvest
+  world, as on the 8x8 task, there is no standard error over worlds: no threshold is applied and the credit
+  is the mean share over orders and replays, as in the old recipe.
 * A switch for the old form (one drone at random, no orders), which is an arm.
 * Tests: the two hand-worked cases of the old `test_sim.py`, expressed in the new simulator: a recharger gets
   no credit when the seeker reached the target on one battery, and full credit goes to a seeker whose random
@@ -1218,29 +1276,34 @@ not depend on the scores.
   reproduce it.
 
 **`wf/train.py`: the rounds.** Configuration from a JSON file named in the card. It writes `status.json`
-every minute, `log.jsonl` per round with everything listed in section 14.4, `ckpt.pt` by write-and-rename
-with the weights, the optimiser, the round, the random generators and the record of posed tasks, and
-`best.pt` chosen on validation. `--resume auto` continues from `ckpt.pt` if it exists. For one GPU, search
-and learning alternate in one process. For several GPUs they become separate processes, one search worker
-per GPU and one learner: workers read the weights from a file that the learner replaces by renaming, and
-write harvested legs as files.
+every minute; `log.jsonl` per round with those items of section 14.4 that use no task notion (the shares of
+cuts with a capture and with a confirmed strategy, legs per trunk, credit per kind, the size of the state,
+the loss); the harvested leg records, from which the benchmark-side script computes the other items
+afterwards; `ckpt.pt` by write-and-rename with the weights, the optimiser, the round, the random generators
+and the record of posed tasks; and `best.pt`, chosen with `run_greedy` on the validation episodes.
+`--resume auto` continues from `ckpt.pt` if it exists. For one GPU, search and learning alternate in one
+process. For several GPUs they become separate processes, one search worker per GPU and one learner: workers
+read the weights from a file that the learner replaces by renaming, and write harvested legs as files.
 
-**`wf/evaluate.py`: greedy evaluation.** One lattice per episode, no noise, no search. It takes a checkpoint
+**`bench/evaluate.py`: evaluation, on the benchmark side.** It may import `wf/`; the reverse stays forbidden.
+One lattice per episode, no noise, no search, through `wf.agent.run_greedy`. It takes a checkpoint
 and a stored set, applies an optional control, and writes counts with Wilson intervals, and for two models
 on the same episodes the paired difference with its interval.
 
 **`wf/check_purity.py`: the contract as a test.** It fails if any learner file (`lattice.py`, `inputs.py`,
 `agent.py`, `explore.py`, `search.py`, `credit.py`, `learn.py`, `train.py`) contains one of the words
 distance, meeting, escort, pincer, sweep, low battery, sighting or role, or if any file in `wf/` imports
-from `bench/`. It is part of the test suite.
+from `bench/`. The environment files `sim.py` and `maps.py` are not scanned for the words, because the rules
+of the world are stated in them. It is part of the test suite.
 
 **An end-to-end smoke test:** three rounds on 8x8 on a CPU run without error, write a status file and a
 checkpoint, and continue from the checkpoint.
 
 ### 12.4 The runs
 
-Three seeds each, 900 rounds, a 25-round take-off test before the first full run. The checkpoint is chosen on
-100 validation tasks every 50 rounds and evaluated once on the test set and on the 2,000 never-posed tasks.
+Three seeds each, 900 rounds, a take-off test (section 7.7) before the first full run. The checkpoint is
+chosen on 100 validation tasks every 50 rounds and evaluated once on the test set and on the 2,000
+never-posed tasks.
 
 | Run | What differs from the new core |
 |---|---|
@@ -1251,16 +1314,21 @@ Three seeds each, 900 rounds, a 25-round take-off test before the first full run
 | Arm 4 | Battery input zeroed, as in the old task |
 | Arm 5 | The greedy rule's captures are stored too |
 | Arm 6 | Credit in the old form: one drone at random, no orders |
+| Strand run (form to be decided, O12) | Trained on tasks with one to five seekers, one recharger and a common target that stays after a capture; the gate of section 14.1 is measured on it |
 
-One change per run: an arm never differs from the new core in more than its one switch.
+One change per run: an arm never differs from the new core in more than its one switch. The strand run uses
+placements in which every seeker needs a recharge and all drones can gather within one battery life, the
+filter of the earlier probe (`probe_seekers` in `probe_extensions.py`). The same tasks are also given to the
+three checkpoints of the new core, which never saw more than one seeker; that number is reported beside the
+gate, as the comparison with the 34% of the old rule.
 
 ### 12.5 Gates of phase 2
 
 * The new core reaches at least 75% on the never-posed tasks, as the mean over three seeds. It has no shared
   noise, so the fair comparison in the old recipe is 65.5%, and 75% asks for the level that the old recipe
   needed shared noise for.
-* The iteration gate (section 14.1).
-* The strand gate, in the form that O12 decides.
+* The iteration gate (section 14.1), measured on the three checkpoints of the new core.
+* The strand gate, in the form that O12 decides, measured on the strand run of section 12.4.
 * **Kill criterion:** no arm passes the iteration gate. Then the question of how a kept state can be made
   stable goes back to design before anything is scaled up.
 
@@ -1289,15 +1357,16 @@ leg limit of 48, respawn after a capture.
 
 **Evaluation of this phase** (a proposal, to be fixed in the phase's first card): 200 maps without dead ends,
 2 episodes each, three capturers and two rechargers, start cells and battery levels as in training, 64 steps,
-greedy readout. The recharge certificate cannot hold here: the largest distance on a 12x12 grid is 22, which
-is less than twice a full charge of 12. The phase reports instead in what share of captured episodes a
-capturer was refilled before the capture.
+greedy readout. The recharge certificate cannot be required here: the largest distance on a 12x12 grid is
+22, so it can never hold for a capturer whose charge is 11 or 12. The phase reports instead in what share of
+captured episodes a capturer was refilled before the capture.
 
 **Runs.** The main recipe with three seeds. Arms with one seed each: two commit groups and as many groups as
 drones, at equal iterations; block redraws of one to three drones switched on; no selection (the best
 screened strategy is kept without confirmation); credit in the old form; credit by closed-loop reruns with
 drones removed. An arm that differs from the main run is repeated with two more seeds before it is believed.
-Not training runs: the three audits of section 14.3. If O13 is approved, the baselines run here.
+Not training runs: the first three audits of section 14.3 (selection, ghost, exact shares). If O13 is
+approved, the baselines run here.
 
 **Gate.** At least 60% with three capturers. One capturer alone: exactly 0 on maps without dead ends. No kind
 of drone with zero mean credit. The ghost drone clears the credit threshold in at most 2% of legs.
@@ -1310,8 +1379,9 @@ grids in the mixture).
 evaluation team is three capturers, one recharger and two observers, 96 steps.
 
 **Runs, about nine.** The same recipe with the target visible, hidden with observers, and hidden without
-observers. Observers flying with their sensing withheld. A second cut at the first sighting, where only the
-target's tie-breaks remain unknown. More worlds per stage. A past window of 3, 8 and 16 slices, and a
+observers. Observers flying with their sensing withheld. The cut taken before the target is drawn against a
+cut taken after the draw, where every clone meets the same hidden cell. More worlds per stage. A past window
+of 3, 8 and 16 slices, and a
 back-propagation span of 2, 8 and 16 steps. Beside them, on the benchmark side: a readout of the target's
 cell fitted afterwards on saved states, to see whether the state still holds where the target was once the
 sighting has left the window.
@@ -1434,8 +1504,9 @@ Every figure here is hand arithmetic on a throughput that has not been measured.
   replays, and about 2.7 billion per run of 900 rounds. Simulator steps are cheap next to lattice iterations.
 * With a throughput of D voxel-iterations per second on one H100: seconds per round = 6 x 10^10 / D, and
   GPU-hours per 900-round run = 1.5 x 10^10 / D. The design assumed D between 110 and 440 million, which
-  gives two to nine minutes per round and **35 to 140 GPU-hours for a full-scale run**. A 12x12 run costs
-  about a quarter of that or less, a 16x16 run a little under half.
+  gives two to nine minutes per round and **34 to 136 GPU-hours for a full-scale run**, which the design and
+  the budgets of section 13 round to 35 to 140. A 12x12 run costs about a quarter of that or less, a 16x16
+  run a little under half.
 * The 900 rounds are carried over from the 8x8 runs. Under a hidden target the gain per round is smaller, and
   the number of rounds may be several times higher. Budgets are set again after the throughput benchmark and
   a 25-round take-off test.
@@ -1521,6 +1592,24 @@ improvements per million clone-steps.
     environment. Its claims are low-confidence, and no number in the design relies on them.
 15. **The design page is rebuilt on the cluster** from now on (section 9.7). The page itself still says that
     the assistant's container builds it.
+16. **Where the session runs.** The design page records that the Mac folder is linked to the kickoff session.
+    That link never came about: the list of folders offered to the session stayed empty. Section 8.2
+    therefore recommends a session that runs on the Mac, which the PI had also asked about.
+17. **The runs of phase 2.** The design page speaks of one change per run and four arms. Section 12.4 builds
+    the new core with all changes and takes one away per arm, with six arms and a strand run. No run isolates
+    staged search, because on a task where nothing is hidden it reduces to "improvements only", which is
+    arm 5.
+18. **One process on one GPU.** The design page separates search workers and learner into processes from the
+    start. Section 12.3 alternates them in one process on a single GPU and separates them for several.
+19. **The evaluator sits on the benchmark side** (`bench/evaluate.py`), because it applies the controls. The
+    learner keeps only the plain greedy loop that it needs to choose a checkpoint on validation episodes.
+20. **The connectivity check on training maps** is named in rule 6 and in O2 as the one benchmark-type check
+    that touches training. The design page lists connectivity checks among the benchmark-side tools without
+    saying so.
+21. **Starting values that this file adds** and that the design page does not give: a credit threshold of 2
+    standard errors; the selection audit in one cut of sixteen; a ghost drone in two of 32 trunks; the seed
+    blocks of section 11.8; the evaluation settings of phases 3 and 4; the definition of the take-off test.
+    All are proposals to be fixed in the card of the first experiment that uses them.
 
 ## 19. History: the 8x8 result
 
@@ -1552,7 +1641,7 @@ a lower bound above 75% on the 2,000 tasks, was not. One training seed per recip
 | Without shared exploration noise (`v11_noshared`) | 135 of 200; 1,309 of 2,000 = 65.5% |
 | An untrained rule finds a rewarded rollout among 64 | On 1.2% of tasks with independent noise, on 9.1% with half of the noise shared |
 | 256 independent rollouts against 64 with shared noise, untrained | 7.0% against 9.0% |
-| More iterations than in training | At one and a half times, `v10` lost 8.5 points and the earlier run nothing; at twice, the two lost 5 and 18 points |
+| More iterations than in training | At one and a half times, `v10` lost 8.5 points and the earlier run nothing; at twice, the earlier run lost 5 points and `v10` 18 |
 | Regrowing the lattice at every step instead of flying one dream | 22 points gained where the recharger starts far away, 5 lost where it starts near |
 | Two seekers placed in one tube channel, never trained that way | Both arrive in 34% of cases; each alone in 81.5% |
 | Without credit | The recharger learned to stand still. It is irrelevant in 56% of tasks |

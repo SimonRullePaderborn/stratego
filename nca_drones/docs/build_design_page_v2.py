@@ -1,4 +1,4 @@
-"""Builds version 2 of the design page (same published file as version 1). Document tooling only: it runs no project code.
+"""Builds version 2 of the design page (published at its own address; version 1 keeps the earlier one). Document tooling only: it runs no project code.
 
 usage: python3 build_design_page_v2.py [out.html] [--standalone]
 """
