@@ -8,8 +8,10 @@ current: when a decision is taken or a phase ends, this file changes in the same
 **State in three sentences.** A first system (8x8 grid, two drones) is measured: 82.0% on its 200-task test set
 and 75.4% on 2,000 tasks that were never posed in training. For the new target (24x24, ten drones of three
 kinds, a hidden evasive target) there is a design, a roadmap, a simulator with tests, a map generator and the
-scripts of the first two measurements. None of the new code has ever been executed, because the H100 cluster is
-not connected yet and nothing may run anywhere else.
+scripts of the first two measurements. Phase 0 passed on the cluster on 27 November: one H100 runs the benchmark's
+stand-in rule at 300.7 million voxel-iterations per second (measured), which puts a full-scale run at about 27 to 50
+GPU-hours (an estimate until the real rule is timed), and the stored 8x8 result reproduces exactly; none of the new
+code in `wf/` has been executed yet.
 
 **How to use this file.**
 
@@ -100,17 +102,17 @@ from the second review; the commit after it holds this plan.
 
 | Part | Files | State |
 |---|---|---|
-| The 8x8 system | `env.py`, `nca.py`, `train.py`, `credit.py`, `analyze.py`, `test_sim.py`, `results/` | Measured. It has no GPU code path and runs on CPUs. The stored numbers were produced with PyTorch 2.15.0 on Python 3.13 |
+| The 8x8 system | `env.py`, `nca.py`, `train.py`, `credit.py`, `analyze.py`, `test_sim.py`, `results/` | Measured. It has no GPU code path and runs on CPUs. The stored numbers were produced with PyTorch 2.15.0 on Python 3.13; on 27 November the cluster reproduced every count of the pre-registered evaluation (`--prereg`) of `v10` and `v11_noshared` exactly (torch 2.15.0, Python 3.11) |
 | Design version 2 | `docs/` | Written. It went through a panel of five independent designs with adversarial reviews and a judge, and a second adversarial review of the text. Nothing in it has been run |
 | Simulator | `wf/sim.py` | Written, never executed. Reviewed twice by reading |
 | Map generator and team layouts | `wf/maps.py` | Written, never executed. One generator family of the four that are planned |
 | Exploration noise | `wf/explore.py` | Written, never executed |
 | Tests of the three files above | `wf/test_sim.py`, 17 tests | Never executed. Every expected value was worked out by hand from the rules. The tests added in the last review round were read once, not twice |
 | First measurement | `wf/yield_table.py` | Written, never executed |
-| Cluster kit | `cluster/probe.sh`, `cluster/bench_rule.py`, `cluster/check_manifest.py` | The probe ran once on 27 November (phase 0, step 3); the other two are written and not yet executed |
-| Experiment cards | `experiments/` | Two cards are filled in up to "before the run" |
+| Cluster kit | `cluster/probe.sh`, `cluster/bench_rule.py`, `cluster/check_manifest.py` | `bench_rule.py` and `check_manifest.py` ran from commit `8102571` on 27 November (benchmark results in `results/bench/`; the manifest check, 85 of 85, in the phase 0 card). `probe.sh` ran once, in its earlier version from the clone at `4d47425`; its facts are in the card |
+| Experiment cards | `experiments/` | The phase 0 card is closed; the phase 1 card is filled in up to "before the run" |
 | The rest of the new system: lattice, search, credit, learner, evaluator, benchmark-side tools | none yet | Not written. Specified in sections 11 and 12 |
-| The cluster | none | Connected on 27 November: one DGX node with 8 H100, no scheduler, jobs as Docker containers; the facts are in the phase 0 card. Phase 0 is in progress |
+| The cluster | none | Connected on 27 November: one DGX node with 8 H100, no scheduler, jobs as Docker containers; the facts are in the phase 0 card. Phase 0 passed the same day |
 
 Code that has never run will contain errors that reading did not find. The first run of each file is therefore
 a test of the file, and section 11.1 says what to do when a test fails.
@@ -344,7 +346,7 @@ proposals" accepts all of them.
 
 | No. | Decision | Proposal and reason | Needed before |
 |---|---|---|---|
-| O1 | Cluster facts: ssh alias, scheduler, number of H100s and for how long, working directory, whether the cluster reaches PyPI | `cluster/probe.sh` answers most of it in one run | Phase 0 |
+| O1 | Cluster facts: ssh alias, scheduler, number of H100s and for how long, working directory, whether the cluster reaches PyPI | Answered in phase 0 (card `2026-11-27-p0-arrival`), except how many of the node's GPUs the programme may use, and for how long; phase 0 used GPU 1 | Phase 0 |
 | O2 | Tools on the benchmark side, never imported by the learner | Allowed: shortest-path detour measure; a scripted team that always sees the target, for admitting instances and as a reference; a second one that acts on what was sensed, for calibrating radii; enumeration of small games; a readout of the target's cell fitted afterwards on saved states. Also allowed, in the map generator: a connectivity check on every generated map, training maps included | Phase 1, step 5 |
 | O3 | What a drone with an empty battery can still do | It cannot sense or capture, and the target ignores it. An empty capturer that could still capture would void the recharge certificate | Phase 1, step 5 |
 | O4 | Flee and wander rule, sight, metric | As in section 5.2: one step ahead, greatest distance to the nearest drone seen, staying allowed, two cells of sight through obstacles, Manhattan distances. Blocked sight would let one capturer ambush and would void the coordination proof | Phase 1, step 5 |
@@ -870,7 +872,8 @@ stored one in both formats, and the difference is recorded. A larger gap is a fa
 not explained away. On the machine of the stored runs one such evaluation took about 30 minutes, judging by
 file times; the limit of three hours for the two is generous.
 
-**Step 8. Restart drill.** A short job of the old trainer is stopped and continued, to learn how the scheduler
+**Step 8. Restart drill.** (Dropped by the PI on 27 November for the cluster then in use: nothing there stops
+jobs, and the new trainer's smoke test covers resuming.) A short job of the old trainer is stopped and continued, to learn how the scheduler
 behaves before a long run depends on it:
 
 ```
@@ -1484,7 +1487,7 @@ stored leg records by a script on the benchmark side, not inside the learner's f
 
 ## 15. Cost model and budget
 
-Every figure here is hand arithmetic on a throughput that has not been measured. Phase 0 replaces it.
+Every figure here, except the bullet "Measured on 27 November", is hand arithmetic on an assumed throughput.
 
 * The window at 24x24: 20 slices of 576 cells, 11,520 voxels. One iteration costs 131,072 multiply-adds per
   voxel. The input convolution runs once per step and costs as much as 1.8 iterations.
@@ -1501,6 +1504,13 @@ Every figure here is hand arithmetic on a throughput that has not been measured.
   gives two to nine minutes per round and **34 to 136 GPU-hours for a full-scale run**, which the design and
   the budgets of section 13 round to 35 to 140. A 12x12 run costs about a quarter of that or less, a 16x16
   run a little under half.
+* Measured on 27 November (phase 0, card `2026-11-27-p0-arrival`): P = 300.7 million on the stand-in. With the
+  factor 1.84375, D = 554 million: about 108 s per round and 27 GPU-hours per 900-round run at full scale. The
+  benchmark's own two 24x24 shapes suggest a smaller factor (a fit gives D of about 420 to 470 million, so 32 to
+  36 GPU-hours), and at D = P a round takes 200 s and a run 50 GPU-hours. At 27 GPU-hours the budgets of section
+  13 fall to about 0.8 of their lower ends; at 50 they come to about 1.4 times their lower ends, still far below
+  their upper ends. Learning mode runs at a third of search speed, which the 0.3 x 10^10 for learning may not
+  price in. Timing the real rule replaces all of these figures.
 * The 900 rounds are carried over from the 8x8 runs. Under a hidden target the gain per round is smaller, and
   the number of rounds may be several times higher. Budgets are set again after the throughput benchmark and
   a 25-round take-off test.

@@ -1,0 +1,38 @@
+{"torch": "2.15.0+cu132", "cuda": "13.2", "cudnn": 92600, "device": "cuda", "gpu": "NVIDIA H100 80GB HBM3", "cpus": 224, "threads": 8, "iters": 16}
+8x8 rule as trained    search fp32 cl=0 comp=0 B= 4096     457.4 M voxel-it/s    34.72 TFLOPS  mem 5.0 GB
+8x8 rule as trained    search fp32 cl=1 comp=0 B= 4096     379.4 M voxel-it/s    28.79 TFLOPS  mem 5.0 GB
+8x8 rule as trained    search fp16 cl=0 comp=0 B= 4096     538.3 M voxel-it/s    40.86 TFLOPS  mem 3.2 GB
+8x8 rule as trained    search fp16 cl=1 comp=0 B= 4096     501.5 M voxel-it/s    38.07 TFLOPS  mem 3.0 GB
+8x8 rule as trained    search bf16 cl=0 comp=0 B= 4096     538.3 M voxel-it/s    40.86 TFLOPS  mem 3.2 GB
+8x8 rule as trained    search bf16 cl=1 comp=0 B= 4096     501.1 M voxel-it/s    38.04 TFLOPS  mem 3.0 GB
+8x8 rule as trained    learn  fp32 cl=0 comp=0 B=  256     115.9 M voxel-it/s     8.80 TFLOPS  mem 3.9 GB
+8x8 rule as trained    learn  fp32 cl=1 comp=0 B=  256     104.9 M voxel-it/s     7.96 TFLOPS  mem 3.9 GB
+8x8 rule as trained    learn  fp16 cl=0 comp=0 B=  256     168.7 M voxel-it/s    12.81 TFLOPS  mem 2.3 GB
+8x8 rule as trained    learn  fp16 cl=1 comp=0 B=  256     159.5 M voxel-it/s    12.10 TFLOPS  mem 2.3 GB
+8x8 rule as trained    learn  bf16 cl=0 comp=0 B=  256     169.3 M voxel-it/s    12.85 TFLOPS  mem 2.3 GB
+8x8 rule as trained    learn  bf16 cl=1 comp=0 B=  256     159.0 M voxel-it/s    12.07 TFLOPS  mem 2.3 GB
+24x24 proposed rule    search fp32 cl=0 comp=0 B=  512     224.3 M voxel-it/s   108.40 TFLOPS  mem 11.8 GB
+24x24 proposed rule    search fp32 cl=1 comp=0 B=  512     226.4 M voxel-it/s   109.43 TFLOPS  mem 11.8 GB
+24x24 proposed rule    search fp16 cl=0 comp=0 B=  512     298.2 M voxel-it/s   144.13 TFLOPS  mem 8.9 GB
+24x24 proposed rule    search fp16 cl=1 comp=0 B=  512     292.1 M voxel-it/s   141.16 TFLOPS  mem 7.4 GB
+24x24 proposed rule    search bf16 cl=0 comp=0 B=  512     300.7 M voxel-it/s   145.35 TFLOPS  mem 8.9 GB
+24x24 proposed rule    search bf16 cl=1 comp=0 B=  512     293.9 M voxel-it/s   142.05 TFLOPS  mem 7.4 GB
+24x24 proposed rule    learn  fp32 cl=0 comp=0 B=   16      61.2 M voxel-it/s    29.60 TFLOPS  mem 4.7 GB
+24x24 proposed rule    learn  fp32 cl=1 comp=0 B=   16      57.3 M voxel-it/s    27.69 TFLOPS  mem 4.7 GB
+24x24 proposed rule    learn  fp16 cl=0 comp=0 B=   16      98.6 M voxel-it/s    47.65 TFLOPS  mem 2.8 GB
+24x24 proposed rule    learn  fp16 cl=1 comp=0 B=   16      89.2 M voxel-it/s    43.14 TFLOPS  mem 2.9 GB
+24x24 proposed rule    learn  bf16 cl=0 comp=0 B=   16      98.4 M voxel-it/s    47.56 TFLOPS  mem 2.8 GB
+24x24 proposed rule    learn  bf16 cl=1 comp=0 B=   16      89.1 M voxel-it/s    43.04 TFLOPS  mem 2.9 GB
+24x24 wider rule       search fp32 cl=0 comp=0 B=  256     127.9 M voxel-it/s   117.87 TFLOPS  mem 8.7 GB
+24x24 wider rule       search fp32 cl=1 comp=0 B=  256     131.7 M voxel-it/s   121.37 TFLOPS  mem 8.7 GB
+24x24 wider rule       search fp16 cl=0 comp=0 B=  256     187.5 M voxel-it/s   172.79 TFLOPS  mem 6.1 GB
+24x24 wider rule       search fp16 cl=1 comp=0 B=  256     189.5 M voxel-it/s   174.67 TFLOPS  mem 5.4 GB
+24x24 wider rule       search bf16 cl=0 comp=0 B=  256     175.2 M voxel-it/s   161.45 TFLOPS  mem 6.1 GB
+24x24 wider rule       search bf16 cl=1 comp=0 B=  256     172.0 M voxel-it/s   158.54 TFLOPS  mem 5.4 GB
+24x24 wider rule       learn  fp32 cl=0 comp=0 B=    8      31.2 M voxel-it/s    28.76 TFLOPS  mem 3.4 GB
+24x24 wider rule       learn  fp32 cl=1 comp=0 B=    8      29.9 M voxel-it/s    27.57 TFLOPS  mem 3.4 GB
+24x24 wider rule       learn  fp16 cl=0 comp=0 B=    8      49.1 M voxel-it/s    45.22 TFLOPS  mem 2.0 GB
+24x24 wider rule       learn  fp16 cl=1 comp=0 B=    8      45.6 M voxel-it/s    42.03 TFLOPS  mem 2.1 GB
+24x24 wider rule       learn  bf16 cl=0 comp=0 B=    8      52.4 M voxel-it/s    48.33 TFLOPS  mem 2.0 GB
+24x24 wider rule       learn  bf16 cl=1 comp=0 B=    8      47.7 M voxel-it/s    43.98 TFLOPS  mem 2.1 GB
+written nca_drones/results/bench/h100.json

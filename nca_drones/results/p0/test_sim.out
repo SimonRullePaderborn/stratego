@@ -1,0 +1,6 @@
+hindsight == simulator on 4556 rewarded (rollout, target) pairs
+all simulator checks passed
+partner relevance: 2.50% of rewarded rollouts needed the recharger
+pruning: mean arrival 3.53 -> 3.08; recharger still moves in 2.25% of rollouts
+cross-play judge == simulator replay on all 3456 pairs (94 rewarded)
+null-partner credit: easy task recharger 0.00, needed-recharge task recharger 0.57, seekers [0.9649999737739563, 1.0]

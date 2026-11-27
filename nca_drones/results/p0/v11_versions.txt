@@ -1,0 +1,1 @@
+torch 2.15.0+cu132 threads 16 cpu AVX512 bf16 autocast conv dtype torch.bfloat16
