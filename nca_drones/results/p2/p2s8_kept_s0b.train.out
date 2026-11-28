@@ -1,0 +1,21 @@
+params: 301232
+[    0] t=21s loss=4.154 search e/n=0.82/0.08 greedy e/n=0.00/0.00 VAL easy=0.03 need=0.000 closed=0.000 buf=33 need=0.06 hard=1.00 tau=3.8 alive=5.8
+[   50] t=719s loss=3.699 search e/n=0.83/0.14 greedy e/n=0.11/0.01 VAL easy=0.14 need=0.000 closed=0.000 buf=1679 need=0.10 hard=0.87 tau=4.6 alive=5.6
+[  100] t=1215s loss=3.090 search e/n=0.86/0.20 greedy e/n=0.14/0.01 VAL easy=0.17 need=0.020 closed=0.020 buf=3513 need=0.12 hard=0.86 tau=4.8 alive=5.7
+[  150] t=1602s loss=2.864 search e/n=0.88/0.20 greedy e/n=0.14/0.02 VAL easy=0.13 need=0.010 closed=0.010 buf=5352 need=0.13 hard=0.86 tau=4.8 alive=6.1
+[  200] t=1810s loss=2.859 search e/n=0.85/0.19 greedy e/n=0.17/0.02 VAL easy=0.10 need=0.020 closed=0.020 buf=7087 need=0.14 hard=0.85 tau=4.8 alive=6.3
+[  250] t=2016s loss=2.839 search e/n=0.84/0.21 greedy e/n=0.18/0.03 VAL easy=0.15 need=0.000 closed=0.010 buf=8879 need=0.14 hard=0.84 tau=4.9 alive=6.0
+[  300] t=2225s loss=3.054 search e/n=0.83/0.20 greedy e/n=0.16/0.03 VAL easy=0.15 need=0.055 closed=0.050 buf=10636 need=0.14 hard=0.84 tau=4.9 alive=6.4
+[  350] t=2438s loss=2.710 search e/n=0.81/0.25 greedy e/n=0.16/0.03 VAL easy=0.16 need=0.040 closed=0.040 buf=12473 need=0.15 hard=0.83 tau=4.9 alive=6.5
+[  400] t=2650s loss=2.556 search e/n=0.85/0.25 greedy e/n=0.19/0.02 VAL easy=0.16 need=0.035 closed=0.030 buf=14354 need=0.15 hard=0.83 tau=4.9 alive=6.5
+[  450] t=2862s loss=2.302 search e/n=0.83/0.25 greedy e/n=0.22/0.02 VAL easy=0.18 need=0.045 closed=0.030 buf=16155 need=0.16 hard=0.82 tau=4.9 alive=6.5
+[  500] t=3075s loss=2.161 search e/n=0.85/0.29 greedy e/n=0.30/0.03 VAL easy=0.27 need=0.045 closed=0.040 buf=18053 need=0.16 hard=0.81 tau=4.9 alive=5.9
+[  550] t=3294s loss=2.016 search e/n=0.90/0.30 greedy e/n=0.37/0.03 VAL easy=0.37 need=0.055 closed=0.060 buf=20000 need=0.17 hard=0.79 tau=5.0 alive=6.2
+[  600] t=3508s loss=1.914 search e/n=0.93/0.31 greedy e/n=0.45/0.04 VAL easy=0.39 need=0.030 closed=0.050 buf=20000 need=0.17 hard=0.76 tau=5.0 alive=7.3
+[  650] t=3719s loss=1.714 search e/n=0.96/0.28 greedy e/n=0.54/0.06 VAL easy=0.56 need=0.125 closed=0.110 buf=20000 need=0.18 hard=0.73 tau=5.0 alive=6.1
+[  700] t=3928s loss=1.587 search e/n=0.97/0.33 greedy e/n=0.64/0.09 VAL easy=0.64 need=0.130 closed=0.100 buf=20000 need=0.18 hard=0.69 tau=4.9 alive=5.8
+[  750] t=4136s loss=1.532 search e/n=0.98/0.36 greedy e/n=0.74/0.10 VAL easy=0.75 need=0.115 closed=0.110 buf=20000 need=0.19 hard=0.64 tau=4.9 alive=5.4
+[  800] t=4341s loss=1.549 search e/n=0.99/0.41 greedy e/n=0.78/0.14 VAL easy=0.83 need=0.185 closed=0.210 buf=20000 need=0.20 hard=0.58 tau=4.9 alive=5.9
+[  850] t=4544s loss=1.455 search e/n=0.99/0.43 greedy e/n=0.84/0.17 VAL easy=0.92 need=0.305 closed=0.260 buf=20000 need=0.21 hard=0.52 tau=4.8 alive=6.3
+[  900] t=4748s loss=1.456 search e/n=1.00/0.47 greedy e/n=0.90/0.20 VAL easy=0.94 need=0.260 closed=0.320 buf=20000 need=0.22 hard=0.45 tau=4.8 alive=5.8
+training finished

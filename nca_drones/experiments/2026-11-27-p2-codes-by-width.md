@@ -33,9 +33,35 @@
 
 ## After the run
 
-* **Result:**
-* **Trajectories looked at:**
-* **Supported, refuted or inconclusive:**
-* **What was learned:**
-* **Next step, and the card it becomes:**
-* **Actual GPU-hours:**
+The eleven runs ran on 27 November 2026 from commit `38e4068` in `~/wf/runs/p2cw`, containers `wf-p2cw-g0`, `-g3`,
+`-g6` and `-g7`, one GPU each. Files: `results/p2/p2cw_*` (evaluation, outputs and logs; the checkpoints stay in the
+run folder on the cluster).
+
+* **Result:** closed loop on each run's 2,000 never-posed tasks (bf16), in percent:
+
+  | Cell | Seed 0 | Seed 1 | Seed 2 | Mean | Standard deviation | Open loop, mean |
+  |---|---|---|---|---|---|---|
+  | narrow, no codes (step 1's recipe) | 79.75 | 65.65 | 73.60 | 73.00 | 7.07 | 65.53 |
+  | wide, no codes | 72.05 | 75.20 | 75.25 | 74.17 | 1.83 | 72.95 |
+  | narrow, codes (step 2's recipe) | 79.60 | 85.00 | 85.50 | 83.37 | 3.27 | 78.88 |
+  | wide, codes (step 5's recipe) | 77.90 (`p2s5_gpu_s0b`) | 71.05 | 80.40 | 76.45 | 4.84 | 70.45 |
+
+  The pooled standard deviation of the twelve runs is 4.68 points (8 degrees of freedom). The standard error of the
+  difference between two cell means is 3.82 points, twice that 7.64. Codes at the design's width: +2.28 points.
+  Codes at the measured width: +10.37 points. Width without codes: +1.17; width with codes: -6.92. Steps 2 and 3
+  together ("wide, codes") against step 1 ("narrow, no codes"): +3.45.
+* **Trajectories looked at:** none; the question was one of means.
+* **Supported, refuted or inconclusive:** refuted in its second half. At the design's width codes cost nothing, as
+  stated. At the measured width they do not cost either: the mean with codes is 10 points above the mean without,
+  2.7 standard errors in the other direction. Step 2's drop of 12 points was noise between two single runs.
+* **What was learned:** a single run of this recipe has a standard deviation of 4.7 points, not the 2.95 of the three
+  CPU baseline seeds, so every verdict of steps 1 to 3 that rested on one run each was within noise: with three
+  seeds, the battery input changes nothing that can be measured (73.0% against the baseline's 72.0%), codes help or
+  cost nothing, and the design's width has not paid on 8x8 (the best cell is the narrow rule with codes, 83.4%).
+  Codes and width stay in the chain as they are: together they are 3.5 points above step 1, and the width is there
+  for sixteen codes and ten drones, which this task does not ask for. For the steps on a GPU the yardstick s is
+  4.68 points, so the rule of section 12.4 allows a single run to lie max(2 s, 2) = 9.4 points below the single run
+  before it. It was measured with open-loop search; whether a run with closed-loop search (step 6 on) scatters as
+  much is not known until one of those steps has three seeds.
+* **Next step, and the card it becomes:** none of its own; the chain goes on from step 5 as run.
+* **Actual GPU-hours:** 1.0 (four containers of 12 to 16 minutes)
