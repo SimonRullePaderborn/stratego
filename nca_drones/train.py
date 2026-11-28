@@ -529,6 +529,8 @@ def main():
     ap.add_argument("--fire_rate", type=float, default=1.0)
     ap.add_argument("--K", type=int, default=32)
     ap.add_argument("--K_jitter", type=int, default=4)
+    ap.add_argument("--K_max", type=int, default=0, help="in learning, the iterations of growth are redrawn per batch uniformly from --K to this, "
+                                                         "in place of --K plus or minus --K_jitter; 0: off. Search and evaluation use --K")
     ap.add_argument("--N", type=int, default=64, help="tasks per round")
     ap.add_argument("--M", type=int, default=64, help="rollouts per task")
     ap.add_argument("--G", type=int, default=4, help="gradient steps per round")
@@ -799,7 +801,10 @@ def main():
                 else:
                     tp = torch.zeros(args.bs, dtype=torch.long)
                     cond = make_cond(bs_, br_, bg_, cfg, battery=bool(args.battery), codes=codes_b)
-                K = args.K + int(torch.randint(-args.K_jitter, args.K_jitter + 1, (1,), generator=gen))
+                if args.K_max > 0:      # redrawn widely, from --K to --K_max (design version 2: 32 to 128)
+                    K = int(torch.randint(args.K, args.K_max + 1, (1,), generator=gen))
+                else:
+                    K = args.K + int(torch.randint(-args.K_jitter, args.K_jitter + 1, (1,), generator=gen))
                 taps = (K - args.taps,) if args.taps > 0 else ()
                 cond, lab_d, w_d = cond.to(dev), blab.to(dev), bw.to(dev)
                 own = (lambda lg: pick_tubes(lg, codes_b)) if args.codes else (lambda lg: lg)   # each drone's own tube
