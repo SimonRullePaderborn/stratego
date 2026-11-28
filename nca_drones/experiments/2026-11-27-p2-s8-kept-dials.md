@@ -53,9 +53,39 @@
 
 ## After the run
 
+The five runs ran on 28 November 2026 from commit `e8b37cd` in `~/wf/runs/p2k` (151 of 151 files), containers
+`wf-p2k-regrow`, `-ks4`, `-ks8`, `-ks16` and `-full`, on GPUs 4, 5, 0, 1 and 3, one each. Files:
+`results/p2/p2k_*.log.jsonl` and `.train.out`; the means below are those of `cluster/log_means.py`.
+
 * **Result:**
-* **Trajectories looked at:**
-* **Supported, refuted or inconclusive:**
+
+  | Run | Easy tasks solved by the rule alone, rounds 125 to 149 | Hard tasks: rule alone / reward in search | Loss, rounds 100 to 150: without a past / with a past | Loss on the next move's slice: without / with a past | Gradient norm | Validation at round 150: easy / hard closed loop | Seconds per round |
+  |---|---|---|---|---|---|---|---|
+  | `p2k_regrow_s0` (step 7) | 89.5% | 21.7% / 50.2% | 1.60 / 1.36 | 1.09 / 0.92 | 10.9 | 0.90 / 0.13 | 6.94 |
+  | `p2k_ks4_s0` (step 8) | 15.0% | 2.3% / 19.9% | 2.83 / 3.27 | 2.08 / 2.95 | 12.2 | 0.13 / 0.01 | 4.08 |
+  | `p2k_ks8_s0` | 82.8% | 7.3% / 26.5% | 1.75 / 1.95 | 1.10 / 1.46 | 7.7 | 0.87 / 0.11 | 4.26 |
+  | `p2k_ks16_s0` | 90.4% | 6.1% / 20.8% | 1.57 / 1.89 | 0.92 / 1.38 | 6.4 | 0.97 / 0.12 | 4.90 |
+  | `p2k_full_s0` | 17.1% | 0.3% / 21.3% | 2.70 / 3.26 | 1.63 / 2.62 | 8.8 | 0.29 / 0.01 | 4.31 |
+
+  A loss of 4.16 is that of a uniform guess over the 64 cells. Both checks held: the log of `p2k_ks4_s0` equals
+  that of `p2s8_kept_s0b`, and the log of `p2k_regrow_s0` that of `p2s7_bound_s0b`, in all 22 common fields for
+  all 151 rounds. The new log fields changed nothing, and a run on a GPU repeats exactly.
+* **Trajectories looked at:** none; the split loss took their place.
+* **Supported, refuted or inconclusive:** supported. With 16 iterations per step the rule alone solves 90.4% of the
+  easy tasks, where the card asked for at least 80%. With 8 it solves 82.8%.
 * **What was learned:**
-* **Next step, and the card it becomes:**
-* **Actual GPU-hours:**
+  * The number of iterations per step decides whether the kept recipe learns: 15% at 4, 83% at 8, 90% at 16, where
+    regrowth has 90%.
+  * The span of back-propagation does not: through the whole replay at 4 per step, 17%. The default of 32 stays.
+  * The split loss shows the way the damage runs. At 4 per step the samples with a past stay near a guess on the
+    slice of their own next move (2.95), and they pull the samples without a past with them (2.08, where the same
+    samples reach 1.09 in regrowth), although those are trained exactly as in step 7: the weights are shared. At 8
+    per step both recover (1.46 and 1.10).
+  * The size of the gradients is not the cause: regrowth has norms as large (10.9) as the run that fails (12.2).
+  * On the hard tasks the kept runs are behind regrowth at round 150: search finds a reward in 27% of them at 8 per
+    step and 21% at 16, where regrowth finds one in 50%, and the rule alone solves 7% and 6% against 22%. The
+    validation numbers are level (0.11 and 0.12 against 0.13). Whether that gap closes is for the full run to show.
+  * Cost per round: 4.26 s at 8 per step and 4.90 s at 16, against 6.94 s for regrowth.
+* **Next step, and the card it becomes:** step 8 in full with 8 iterations per step, the smaller number that learns:
+  card `2026-11-28-p2-s8-kept-ks8`.
+* **Actual GPU-hours:** 1.0 (five runs of 10 to 18 minutes)

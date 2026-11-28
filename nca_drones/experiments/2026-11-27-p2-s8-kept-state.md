@@ -50,9 +50,39 @@ repeated as `p2s8_kept_s0b` from `~/wf/runs/p2s8b`, at the commit that holds thi
 
 ## After the run
 
-* **Result:**
-* **Trajectories looked at:**
-* **Supported, refuted or inconclusive:**
-* **What was learned:**
-* **Next step, and the card it becomes:** step 9, the sliding window
-* **Actual GPU-hours:**
+The run `p2s8_kept_s0b` ran on 27 November 2026 from commit `9c264c1` in `~/wf/runs/p2s8b`, container
+`wf-p2s8b-s0`, GPU 5 only. Files: `results/p2/p2s8_kept_s0b.*`. The iteration gate was measured on 28 November with
+the code of commit `1eb96e4` in `~/wf/runs/p2gate` (container `wf-p2gate-b`, GPU 7); files
+`results/p2/p2s8_kept_s0b.x*.json`, `.x*.out` and `.gate.out`.
+
+* **Result:** closed loop on its 2,000 never-posed tasks: 398 = 19.9% (bf16; interval 18.2 to 21.7) and 406 (fp32).
+  Open loop: 415 = 20.75%. Test set: 47 of 200 closed, 53 open; of the 200, 51.5% never met and 25% ran out of
+  time. Chosen checkpoint: round 900. Step 7: 94.2%.
+  The course of the run: until round 450 the rule alone solved 11 to 22% of the easy tasks posed in search and the
+  open-loop readout 10 to 18% of the easy validation tasks. From round 500 it learned: 30% of the easy tasks at
+  round 500, 54% at 650, 74% at 750, 90% at 900. At round 900 its validation numbers (easy 0.94, hard 0.26 open and
+  0.32 closed) stood where step 7's stood near round 200 (0.97, 0.345 and 0.44). The run was still climbing when
+  the protocol ended it.
+  Cost: 4.2 s per round over the last 400 rounds, against 7.47 s for step 7. The iterations of a search episode
+  fell from 640 to 112, but about 3 s of a round are not iterations (the simulator, credit, the buffer), so on 8x8
+  the round is 1.8 times faster, not 6. The run took 1.3 hours; its first 150 rounds were slowed by other jobs on
+  the same cores until the container was given eight of its own.
+  Iteration gate, on this checkpoint (growth and iterations per step times 2, 4 and 8; paired difference to 19.9%,
+  bf16): -0.05 points (95% interval -0.94 to +0.84), 0.00 (-0.93 to +0.93) and -0.60 (-1.54 to +0.34). All three
+  lower bounds are above -2: the gate is passed, by a rule that solves a fifth of the tasks. In fp32: -0.75, -0.20
+  and -0.70. Open loop: 20.50%, 20.40% and 20.25%.
+  Not measured: the largest root-mean-square of the state at the end of an episode; under the bound it cannot
+  exceed 1.
+* **Trajectories looked at:** none drawn. The look at the failing run is in two cards: the short runs of
+  `2026-11-27-p2-s8-kept-dials`, and the kept readout of the checkpoints of steps 6 and 7 in
+  `2026-11-28-p2-s8-kept-readout`.
+* **Supported, refuted or inconclusive:** refuted. 74.3 points below step 7: step 8 with 4 iterations per step is
+  not kept.
+* **What was learned:** with 4 iterations per step the kept recipe starts to learn about 450 rounds late, so the
+  900 rounds of the protocol end it far from finished. The delay is in learning, not in flying: step 7's
+  checkpoint, which never trained with a kept state, solves 84.8% when flown with one at 4 iterations per step.
+  And training with a kept state gives what the bound alone did not: a rule that is unchanged at 8 times its
+  iterations, where step 7's rule falls to 4%.
+* **Next step, and the card it becomes:** the dials of this step (card `2026-11-27-p2-s8-kept-dials`), then the
+  full run with the dial they select (card `2026-11-28-p2-s8-kept-ks8`). Step 9 waits for that run.
+* **Actual GPU-hours:** 1.3 for the run, 0.1 for the gate

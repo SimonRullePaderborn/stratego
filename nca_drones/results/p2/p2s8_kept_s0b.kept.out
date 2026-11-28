@@ -1,0 +1,2 @@
+[bf16] 2000 tasks, iterations x1 with a kept state, 4 per step -> x1 with a kept state, 4 per step: 19.90% -> 19.90%; lost 0, gained 0; paired difference +0.00 points, 95% interval +0.00 to +0.00; lower bound above -2 points: yes
+[fp32] 2000 tasks, iterations x1 with a kept state, 4 per step -> x1 with a kept state, 4 per step: 20.30% -> 20.30%; lost 0, gained 0; paired difference +0.00 points, 95% interval +0.00 to +0.00; lower bound above -2 points: yes

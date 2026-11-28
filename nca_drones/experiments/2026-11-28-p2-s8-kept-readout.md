@@ -39,9 +39,29 @@
 
 ## After the run
 
-* **Result:**
-* **Trajectories looked at:**
-* **Supported, refuted or inconclusive:**
-* **What was learned:**
-* **Next step, and the card it becomes:**
-* **Actual GPU-hours:**
+The evaluations ran on 28 November 2026 from commit `72fe72e` in `~/wf/runs/p2kr` (215 of 215 files), container
+`wf-p2kr`, GPU 6 only. Files: `results/p2/<run>.kept<n>.json`, `.kept<n>.out` and `.kept.out`.
+
+* **Result:** closed loop on each checkpoint's 2,000 never-posed tasks (bf16); behind each rate the paired difference
+  to the run's own evaluation in points, with its 95% interval:
+
+  | Checkpoint, trained with regrowth | Regrown (own evaluation) | Kept, 4 per step | Kept, 8 per step | Kept, 16 per step |
+  |---|---|---|---|---|
+  | Step 7, `p2s7_bound_s0b` (bounded update) | 94.20% | 84.80%, -9.40 (-11.01 to -7.79) | 63.55%, -30.65 (-32.80 to -28.50) | 33.25%, -60.95 (-63.15 to -58.75) |
+  | Step 6, `p2s6_closed_s0` (measured update) | 89.05% | 84.50%, -4.55 (-6.10 to -3.00) | 75.55%, -13.50 (-15.38 to -11.62) | 66.85%, -22.20 (-24.32 to -20.08) |
+
+  In fp32 the differences are -9.35, -30.95 and -61.00 for step 7 and -4.25, -13.70 and -22.20 for step 6. What
+  grows with the iterations per step is the share of episodes that run out of time: on the test set 9%, 25.5% and
+  42.5% for step 7 and 4.5%, 12% and 20% for step 6, where regrown there is none. The check of the new switch
+  held: on step 8's checkpoint, `--kept 1 --ks 4` lost no task and gained none.
+* **Trajectories looked at:** none.
+* **Supported, refuted or inconclusive:** refuted: the whole interval, -11.0 to -7.8 points, lies below -5.
+* **What was learned:** two things. A rule that never trained with a kept state still solves 85% of the tasks when
+  flown with one at 4 iterations per step, so flying with a kept state is not what holds step 8 at 19.9%; its
+  learning is. And a rule trained with regrowth is not at rest once its plan is laid: every iteration beyond the
+  32 it was trained for moves it further off, with the bound faster than without. A kept state therefore has to
+  be trained for. The version "kept in search and evaluation, regrown in learning" would start 9 points below
+  step 7 and fail the iteration gate as step 7 does; it is not proposed.
+* **Next step, and the card it becomes:** the dials of step 8 (card `2026-11-27-p2-s8-kept-dials`), and from them
+  the full run with 8 iterations per step (card `2026-11-28-p2-s8-kept-ks8`).
+* **Actual GPU-hours:** under 0.1 (seven evaluations in a minute and a half)

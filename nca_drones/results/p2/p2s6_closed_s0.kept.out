@@ -1,0 +1,6 @@
+[bf16] 2000 tasks, iterations x1 -> x1 with a kept state, 4 per step: 89.05% -> 84.50%; lost 173, gained 82; paired difference -4.55 points, 95% interval -6.10 to -3.00; lower bound above -2 points: no
+[bf16] 2000 tasks, iterations x1 -> x1 with a kept state, 8 per step: 89.05% -> 75.55%; lost 338, gained 68; paired difference -13.50 points, 95% interval -15.38 to -11.62; lower bound above -2 points: no
+[bf16] 2000 tasks, iterations x1 -> x1 with a kept state, 16 per step: 89.05% -> 66.85%; lost 505, gained 61; paired difference -22.20 points, 95% interval -24.32 to -20.08; lower bound above -2 points: no
+[fp32] 2000 tasks, iterations x1 -> x1 with a kept state, 4 per step: 89.30% -> 85.05%; lost 166, gained 81; paired difference -4.25 points, 95% interval -5.78 to -2.72; lower bound above -2 points: no
+[fp32] 2000 tasks, iterations x1 -> x1 with a kept state, 8 per step: 89.30% -> 75.60%; lost 343, gained 69; paired difference -13.70 points, 95% interval -15.60 to -11.80; lower bound above -2 points: no
+[fp32] 2000 tasks, iterations x1 -> x1 with a kept state, 16 per step: 89.30% -> 67.10%; lost 507, gained 63; paired difference -22.20 points, 95% interval -24.33 to -20.07; lower bound above -2 points: no

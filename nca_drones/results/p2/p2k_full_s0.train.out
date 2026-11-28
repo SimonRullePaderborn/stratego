@@ -1,0 +1,6 @@
+params: 301232
+[    0] t=5s loss=4.154 search e/n=0.82/0.08 greedy e/n=0.00/0.00 VAL easy=0.05 need=0.000 closed=0.000 buf=33 need=0.06 hard=1.00 tau=3.8 alive=5.8
+[   50] t=194s loss=3.770 search e/n=0.86/0.12 greedy e/n=0.16/0.00 VAL easy=0.08 need=0.000 closed=0.000 buf=1758 need=0.10 hard=0.81 tau=4.6 alive=5.7
+[  100] t=394s loss=3.495 search e/n=0.83/0.13 greedy e/n=0.14/0.01 VAL easy=0.19 need=0.010 closed=0.010 buf=3479 need=0.11 hard=0.82 tau=4.6 alive=6.3
+[  150] t=606s loss=2.900 search e/n=0.87/0.19 greedy e/n=0.17/0.00 VAL easy=0.29 need=0.015 closed=0.010 buf=5285 need=0.12 hard=0.82 tau=4.8 alive=6.5
+training finished
