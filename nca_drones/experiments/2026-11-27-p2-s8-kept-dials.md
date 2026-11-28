@@ -89,3 +89,11 @@ The five runs ran on 28 November 2026 from commit `e8b37cd` in `~/wf/runs/p2k` (
 * **Next step, and the card it becomes:** step 8 in full with 8 iterations per step, the smaller number that learns:
   card `2026-11-28-p2-s8-kept-ks8`.
 * **Actual GPU-hours:** 1.0 (five runs of 10 to 18 minutes)
+
+## Correction, 28 November (after the runs of the card `2026-11-28-p2-s8-kept-ks8`)
+
+The verdict above rests on seed 0 alone and does not hold on other seeds. With 8 iterations per step, seeds 1 and 2
+solve 15.3% and 14.7% of the easy tasks over rounds 125 to 149, as seed 0 does with 4 per step. Step 7's own
+recipe, which regrows, solves 15.8% there on seed 2, against 89.5% on seed 0 and 94.9% on seed 1. So the number of
+iterations per step moved one seed out of the stall and is not what causes it. A short run on one seed cannot
+tell a property of a recipe from a property of a seed; from here on a look at a failing recipe uses three seeds.

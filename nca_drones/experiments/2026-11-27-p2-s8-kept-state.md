@@ -86,3 +86,12 @@ the code of commit `1eb96e4` in `~/wf/runs/p2gate` (container `wf-p2gate-b`, GPU
 * **Next step, and the card it becomes:** the dials of this step (card `2026-11-27-p2-s8-kept-dials`), then the
   full run with the dial they select (card `2026-11-28-p2-s8-kept-ks8`). Step 9 waits for that run.
 * **Actual GPU-hours:** 1.3 for the run, 0.1 for the gate
+
+## Correction, 28 November (after the runs of the card `2026-11-28-p2-s8-kept-ks8`)
+
+Two readings above are wrong. First, the passed iteration gate: this checkpoint is unchanged under more iterations
+because it solves little, not because a kept state was trained for. The one run with a kept state that learned
+(seed 0 at 8 iterations per step, 67.95%) loses 20, 52 and 66 points at 2, 4 and 8 times its iterations. Second,
+the delay is not a matter of 4 iterations per step: at 8 per step, seeds 1 and 2 stall in the same way, and seed
+2 stalls in step 7's recipe, where no state is kept. The stall is followed up in the card
+`2026-11-28-p2-without-bound`.
