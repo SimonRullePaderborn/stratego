@@ -44,8 +44,9 @@ the code of commit `1eb96e4` in `~/wf/runs/p2gate` (`cluster/jobs/p2_iteration_g
 GPU 7); files `results/p2/p2s6_closed_s0.x*.json`, `.x*.out` and `.gate.out`.
 
 * **Result:** closed loop on its 2,000 never-posed tasks: 1,781 = 89.05% (bf16; interval 87.6 to 90.3) and 1,786
-  (fp32). Open loop: 1,791 = 89.55%. Test set: 185 of 200 closed, 184 open. Chosen checkpoint: round 900. Step 5:
-  77.9% closed and 68.8% open; the three seeds of step 5's recipe average 76.45%.
+  (fp32). Open loop: 1,791 = 89.55%. Test set: 185 of 200 closed, 184 open. Chosen checkpoint: round 800 (0.95 on the
+  100 validation tasks; round 900 had 0.93). Step 5: 77.9% closed and 68.8% open; the three seeds of step 5's
+  recipe average 76.45%.
   Cost: 7.97 s per round against 0.43 s in step 5, 18.5 times; the run took 2.0 hours on one GPU.
   Search and the rule alone on the hard tasks (share with a reward in search / solved greedily): 0.25 / 0.05 at
   round 50, 0.47 / 0.20 at round 100, 0.65 / 0.38 at round 150, 0.87 / 0.66 at round 400, 0.98 / 0.91 at round 900.
