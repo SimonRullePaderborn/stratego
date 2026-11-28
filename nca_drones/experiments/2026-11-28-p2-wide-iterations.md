@@ -45,6 +45,9 @@
 
 ## After the run
 
+Not run. The card, the switch (off unless given) and the folder `~/wf/runs/p2wi` (314 of 314 files, tests passed)
+were prepared on 28 November; the runs waited for the PI's word, and at 02:40 UTC the PI had all runs stopped.
+
 * **Result:**
 * **Trajectories looked at:**
 * **Supported, refuted or inconclusive:**

@@ -52,9 +52,35 @@
 
 ## After the run
 
-* **Result:**
-* **Trajectories looked at:**
-* **Supported, refuted or inconclusive:**
-* **What was learned:**
-* **Next step, and the card it becomes:**
-* **Actual GPU-hours:**
+The five runs started on 28 November 2026 at 02:00 UTC from commit `8e434ea` in `~/wf/runs/p2nb` (271 of 271
+files), containers `wf-p2nb-r1`, `-r2`, `-k0`, `-k1`, `-k2` on GPUs 0, 1, 3, 4 and 5. **They were stopped at 02:40
+UTC at the PI's request**, after about 305, 309, 551, 528 and 540 rounds. None reached round 900, so none was evaluated
+by the protocol and no iteration gate was measured. Files: `results/p2/<run>.stopped.log.jsonl` (the log as it
+stood) and `.train.out`. The folder on the cluster still holds each run's last checkpoint.
+
+* **Result:** the part of the card that concerns rounds 125 to 149 was reached by all five runs. Easy tasks solved
+  by the rule alone there, with the runs that have the bound beside them:
+
+  | Recipe | Seed 0 | Seed 1 | Seed 2 |
+  |---|---|---|---|
+  | Regrown, measured update (step 6) | 91.8% | 90.5% | 89.1% |
+  | Regrown, bounded update (step 7) | 89.5% | 94.9% | 15.8% |
+  | Kept, 8 per step, measured update | 84.2% | 72.4% | 91.6% |
+  | Kept, 8 per step, bounded update | 82.8% | 15.3% | 14.7% |
+
+  Where the runs stood when stopped, on the 100 validation tasks that need a recharge, closed loop: step 6's recipe
+  0.68 (seed 1) and 0.54 (seed 2) at round 300, where seed 0 had 0.64; the kept state without the bound 0.14
+  (seed 0, round 550; 0.55 at round 500), 0.32 (seed 1, round 500) and 0.38 (seed 2, round 500), where step 6
+  had 0.82 at round 500. In search, the kept runs found a reward in 39 to 50% of the hard tasks at round 500,
+  step 6 in 90%.
+* **Trajectories looked at:** none.
+* **Supported, refuted or inconclusive:** supported, for what the card asked of rounds 125 to 149: all five runs are
+  above 50% (72.4% to 91.6%), and no run with the measured update stalled. The two verdicts at round 900, step 7
+  against step 6 and the kept state on step 6 against step 6, were not reached.
+* **What was learned:** the stall comes with the bounded update. With it, three of six runs stalled; without it,
+  none of the six did, on the same seeds, regrown and kept. What is not known: where the kept state without the
+  bound ends at round 900. At the stop it learned the easy tasks on every seed but was well behind regrowth on the
+  tasks that need a recharge, and its search found a reward for about half as many of them.
+* **Next step, and the card it becomes:** none started. All runs are stopped; how the chain goes on is the PI's
+  decision.
+* **Actual GPU-hours:** 3.3 (five containers of 40 minutes)
