@@ -1,0 +1,10 @@
+TEST (200 held-out recharge-needed tasks)  closed-loop: 0/200 = 0.000   open-loop dream: 0/200 = 0.000
+  outcomes: {'success': 0.0, 'never_met': 0.87, 'met_then_died': 0.045, 'timeout': 0.085}
+  by d(seeker,target):    {6: '0/67', 7: '0/44', 8: '0/32', 9: '0/27', 10: '0/18', 11: '0/5', 12: '0/5', 13: '0/2'}
+  by d(seeker,recharger): {1: '0/7', 2: '0/21', 3: '0/36', 4: '0/25', 5: '0/24', 6: '0/33', 7: '0/28', 8: '0/10', 9: '0/13', 10: '0/3'}
+[bf16] NEW 2000 (never posed in training: True): closed 3/2000 = 0.0015 CI (0.0005102543486519297, 0.004401111899059467)   open 0/2000 = 0.0000 CI (0.0, 0.0019171176005129348)
+[bf16] TEST 200: closed 0/200   open 0/200
+[bf16] closed-loop by seeker-recharger distance: {1: '1/114', 2: '1/221', 3: '1/228', 4: '0/246', 5: '0/268', 6: '0/274', 7: '0/240', 8: '0/183', 9: '0/141', 10: '0/85'}
+[fp32] NEW 2000 (never posed in training: True): closed 6/2000 = 0.0030 CI (0.0013756111462276122, 0.006530003748682246)   open 0/2000 = 0.0000 CI (0.0, 0.0019171176005129348)
+[fp32] TEST 200: closed 1/200   open 0/200
+[fp32] closed-loop by seeker-recharger distance: {1: '0/114', 2: '1/221', 3: '2/228', 4: '2/246', 5: '0/268', 6: '1/274', 7: '0/240', 8: '0/183', 9: '0/141', 10: '0/85'}

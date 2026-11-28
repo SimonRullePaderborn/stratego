@@ -1,0 +1,8 @@
+[bf16] 2000 tasks, iterations x1 -> x1: 11.35% -> 11.35%; lost 0, gained 0; paired difference +0.00 points, 95% interval +0.00 to +0.00; lower bound above -2 points: yes
+[bf16] 2000 tasks, iterations x1 -> x2: 11.35% -> 11.55%; lost 11, gained 15; paired difference +0.20 points, 95% interval -0.30 to +0.70; lower bound above -2 points: yes
+[bf16] 2000 tasks, iterations x1 -> x4: 11.35% -> 11.70%; lost 12, gained 19; paired difference +0.35 points, 95% interval -0.20 to +0.90; lower bound above -2 points: yes
+[bf16] 2000 tasks, iterations x1 -> x8: 11.35% -> 11.80%; lost 11, gained 20; paired difference +0.45 points, 95% interval -0.10 to +1.00; lower bound above -2 points: yes
+[fp32] 2000 tasks, iterations x1 -> x1: 11.50% -> 11.50%; lost 0, gained 0; paired difference +0.00 points, 95% interval +0.00 to +0.00; lower bound above -2 points: yes
+[fp32] 2000 tasks, iterations x1 -> x2: 11.50% -> 11.65%; lost 7, gained 10; paired difference +0.15 points, 95% interval -0.25 to +0.55; lower bound above -2 points: yes
+[fp32] 2000 tasks, iterations x1 -> x4: 11.50% -> 11.80%; lost 8, gained 14; paired difference +0.30 points, 95% interval -0.16 to +0.76; lower bound above -2 points: yes
+[fp32] 2000 tasks, iterations x1 -> x8: 11.50% -> 12.00%; lost 7, gained 17; paired difference +0.50 points, 95% interval +0.02 to +0.98; lower bound above -2 points: yes
