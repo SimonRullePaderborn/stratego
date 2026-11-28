@@ -187,8 +187,15 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="")
     ap.add_argument("--device", default="cpu", help="where the rule runs; give the device the run was trained on (phase 2, step 5)")
     ap.add_argument("--mult", type=int, default=1, help="iteration gate: every iteration count (K, and ks of a kept state) times this")
+    ap.add_argument("--kept", type=int, default=-1, help="closed-loop readout with a kept state (1) or with regrowth at every step (0), "
+                                                         "whatever the run was trained with; -1: as trained")
+    ap.add_argument("--ks", type=int, default=0, help="iterations per step of a kept state; 0: as trained")
     args = ap.parse_args()
     model, cfg, a, rnd = load(args.ckpt, args.device)
+    if args.kept >= 0:
+        model.kept = bool(args.kept)
+    if args.ks:
+        model.ks = args.ks
     if args.full and (uses_codes(model) or args.device != "cpu"):
         raise SystemExit("--full (lesions, probes, tube diagnostics) is written for CPU models without codes; use --prereg")
     K, amp = (args.K or a["K"]) * args.mult, bool(a.get("amp", 0))

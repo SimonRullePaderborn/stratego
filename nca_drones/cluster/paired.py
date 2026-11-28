@@ -21,6 +21,11 @@ def read(path):
         return json.load(f)
 
 
+def how(d):
+    """How the file's evaluation ran the rule: the multiple of its iterations, and the iterations per step if the state was kept."""
+    return f"x{d.get('mult', 1)}" + (f" with a kept state, {d['ks']} per step" if d.get("ks") else "")
+
+
 def main():
     a, b = read(sys.argv[1]), read(sys.argv[2])
     prec = sys.argv[3] if len(sys.argv) > 3 else "bf16"
@@ -35,7 +40,7 @@ def main():
     sd = math.sqrt(sum((v - m) ** 2 for v in d) / (n - 1))
     half = 1.96 * sd / math.sqrt(n)
     lo, hi = 100 * (m - half), 100 * (m + half)
-    print(f"[{prec}] {n} tasks, iterations x{a.get('mult', 1)} -> x{b.get('mult', 1)}: "
+    print(f"[{prec}] {n} tasks, iterations {how(a)} -> {how(b)}: "
           f"{100 * x.count('1') / n:.2f}% -> {100 * y.count('1') / n:.2f}%; lost {d.count(-1)}, gained {d.count(1)}; "
           f"paired difference {100 * m:+.2f} points, 95% interval {lo:+.2f} to {hi:+.2f}; "
           f"lower bound above -2 points: {'yes' if lo > -2 else 'no'}")
